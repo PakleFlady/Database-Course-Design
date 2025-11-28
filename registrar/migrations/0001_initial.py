@@ -222,13 +222,13 @@ class Migration(migrations.Migration):
                 "verbose_name": "上课时间",
                 "verbose_name_plural": "上课时间",
                 "ordering": ["day_of_week", "start_time"],
+                "constraints": [
+                    models.CheckConstraint(
+                        check=models.Q(("end_time__gt", django.db.models.expressions.F("start_time"))),
+                        name="meetingtime_end_after_start",
+                    )
+                ],
             },
-            constraints=[
-                models.CheckConstraint(
-                    check=models.Q(("end_time__gt", django.db.models.expressions.F("start_time"))),
-                    name="meetingtime_end_after_start",
-                )
-            ],
         ),
         migrations.CreateModel(
             name="CoursePrerequisite",
