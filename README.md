@@ -18,7 +18,7 @@
 1. **准备环境**
    ```bash
    python -m venv .venv
-   source .venv/bin/activate  # Windows 使用 .venv\\Scripts\\activate
+   source .venv/bin/activate  # Windows 使用 .venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
