@@ -17,8 +17,8 @@
 ## 快速开始
 1. **准备环境**
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Windows 使用 .venv\Scripts\activate
+   python -m venv venv
+   venv\Scripts\activate  # Windows方法
    pip install -r requirements.txt
    ```
 
