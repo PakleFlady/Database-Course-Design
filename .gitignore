@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.sqlite3
+university_demo.db
+.env
+venv/
+*.sqlite
+.static/
