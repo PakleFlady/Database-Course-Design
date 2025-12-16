@@ -205,3 +205,21 @@ class Enrollment(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.student} -> {self.section} ({self.status})"
+
+
+class UserSecurityProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="security_profile", verbose_name="账号")
+    force_password_change = models.BooleanField("首次登录需修改密码", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "账号安全策略"
+        verbose_name_plural = "账号安全策略"
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.user.username} security policy"
+
+    def mark_password_changed(self) -> None:
+        self.force_password_change = False
+        self.save(update_fields=["force_password_change", "updated_at"])

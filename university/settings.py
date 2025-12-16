@@ -23,6 +23,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "registrar.middleware.EnforcePasswordChangeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -76,3 +77,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# 默认初始密码：管理员在创建用户时无需手动输入密码，系统会自动设置该密码，并在首次
+# 登录时强制用户修改。
+DEFAULT_INITIAL_PASSWORD = "ChangeMe123!"

@@ -1,5 +1,11 @@
 """Admin configuration for the course registration domain."""
+from django import forms
+from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.forms import UserChangeForm
+from django.utils.translation import gettext_lazy as _
 
 from .models import (
     Course,
@@ -11,7 +17,92 @@ from .models import (
     MeetingTime,
     Semester,
     StudentProfile,
+    UserSecurityProfile,
 )
+
+User = get_user_model()
+
+
+class UserCreationWithoutPasswordForm(forms.ModelForm):
+    """User creation form that relies on the default password policy."""
+
+    class Meta:
+        model = User
+        fields = (
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "is_staff",
+            "is_superuser",
+            "is_active",
+            "groups",
+            "user_permissions",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        default_password = getattr(settings, "DEFAULT_INITIAL_PASSWORD", "ChangeMe123!")
+        help_message = f"新账号将自动设置默认密码“{default_password}”，首次登录会要求修改。"
+        self.fields["username"].help_text = help_message
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
+
+
+class UserSecurityInline(admin.StackedInline):
+    model = UserSecurityProfile
+    can_delete = False
+    verbose_name = "安全策略"
+    verbose_name_plural = "安全策略"
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UserAdmin(DjangoUserAdmin):
+    add_form = UserCreationWithoutPasswordForm
+    form = UserChangeForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "is_staff",
+                    "is_superuser",
+                    "is_active",
+                    "groups",
+                    "user_permissions",
+                ),
+            },
+        ),
+    )
+    inlines = [UserSecurityInline]
+    list_display = ("username", "email", "is_staff", "is_superuser", "is_active")
+    fieldsets = (
+        (None, {"fields": ("username", "password")}),
+        (_("Personal info"), {"fields": ("first_name", "last_name", "email")}),
+        (
+            _("Permissions"),
+            {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")},
+        ),
+        (_("Important dates"), {"fields": ("last_login", "date_joined")}),
+    )
+
+    def get_inline_instances(self, request, obj=None):
+        if not obj:
+            return []
+        return super().get_inline_instances(request, obj)
 
 
 class MeetingTimeInline(admin.TabularInline):
