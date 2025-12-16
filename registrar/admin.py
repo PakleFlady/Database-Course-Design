@@ -1,5 +1,9 @@
 """Admin configuration for the course registration domain."""
+from django import forms
+from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import (
     Course,
@@ -12,6 +16,60 @@ from .models import (
     Semester,
     StudentProfile,
 )
+
+User = get_user_model()
+admin.site.unregister(User)
+
+
+class UserCreationWithDefaultPasswordForm(forms.ModelForm):
+    """Assign the project default password automatically when creating users."""
+
+    class Meta:
+        model = User
+        fields = (
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "is_staff",
+            "is_superuser",
+            "is_active",
+            "groups",
+            "user_permissions",
+        )
+
+    def save(self, commit: bool = True):
+        user = super().save(commit=False)
+        user.set_password(settings.DEFAULT_INITIAL_PASSWORD)
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
+
+
+@admin.register(User)
+class UserAdmin(DjangoUserAdmin):
+    add_form = UserCreationWithDefaultPasswordForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "is_staff",
+                    "is_superuser",
+                    "is_active",
+                    "groups",
+                    "user_permissions",
+                ),
+            },
+        ),
+    )
+
 
 
 class MeetingTimeInline(admin.TabularInline):
