@@ -8,6 +8,25 @@ from django.db.models import F, Q
 User = get_user_model()
 
 
+class UserSecurityProfile(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="security_profile",
+        verbose_name="账号",
+    )
+    must_change_password = models.BooleanField(
+        "首次登录需修改密码", default=False, help_text="登录后会被强制跳转到修改密码页面。"
+    )
+
+    class Meta:
+        verbose_name = "账号安全设置"
+        verbose_name_plural = "账号安全设置"
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.user.username} - must_change_password={self.must_change_password}"
+
+
 class Department(models.Model):
     code = models.CharField("院系代码", max_length=20, unique=True)
     name = models.CharField("院系名称", max_length=255)

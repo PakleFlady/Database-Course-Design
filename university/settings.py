@@ -25,6 +25,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "registrar.middleware.ForcePasswordChangeMiddleware",
 ]
 
 ROOT_URLCONF = "university.urls"
@@ -76,3 +77,6 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# 应用默认初始密码，创建账号时自动设定，首次登录需修改
+DEFAULT_INITIAL_PASSWORD = "ChangeMe123!"

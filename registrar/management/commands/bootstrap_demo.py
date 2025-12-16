@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
@@ -49,9 +50,12 @@ class Command(BaseCommand):
         if created_admin:
             admin_user.is_staff = True
             admin_user.is_superuser = True
-            admin_user.set_password("admin123")
+            admin_user.set_password(settings.DEFAULT_INITIAL_PASSWORD)
             admin_user.save()
-            self.stdout.write(self.style.SUCCESS("Created admin / admin123"))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Created admin / {settings.DEFAULT_INITIAL_PASSWORD} (初次登录需修改密码)"
+                )
 
         carol_user, _ = User.objects.get_or_create(username="carol", defaults={"first_name": "Carol", "email": "carol@example.com"})
         dave_user, _ = User.objects.get_or_create(username="dave", defaults={"first_name": "Dave", "email": "dave@example.com"})
@@ -60,7 +64,7 @@ class Command(BaseCommand):
 
         for user in (carol_user, dave_user, alice_user, bob_user):
             if not user.has_usable_password():
-                user.set_password("demo123")
+                user.set_password(settings.DEFAULT_INITIAL_PASSWORD)
                 user.save()
 
         carol_profile, _ = InstructorProfile.objects.get_or_create(user=carol_user, defaults={"department": cse, "title": "副教授"})

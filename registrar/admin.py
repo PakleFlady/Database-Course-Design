@@ -1,5 +1,9 @@
 """Admin configuration for the course registration domain."""
+from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django import forms
 
 from .models import (
     Course,
@@ -9,9 +13,75 @@ from .models import (
     Enrollment,
     InstructorProfile,
     MeetingTime,
+    UserSecurityProfile,
     Semester,
     StudentProfile,
 )
+
+User = get_user_model()
+
+
+class DefaultPasswordUserCreationForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = (
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "is_staff",
+            "is_superuser",
+            "is_active",
+            "groups",
+            "user_permissions",
+        )
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.set_password(settings.DEFAULT_INITIAL_PASSWORD)
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
+
+
+class DefaultPasswordUserAdmin(BaseUserAdmin):
+    add_form = DefaultPasswordUserCreationForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "email",
+                    "first_name",
+                    "last_name",
+                    "is_staff",
+                    "is_superuser",
+                    "is_active",
+                    "groups",
+                    "user_permissions",
+                ),
+                "description": f"新建用户将自动分配默认密码：{settings.DEFAULT_INITIAL_PASSWORD}",
+            },
+        ),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.set_password(settings.DEFAULT_INITIAL_PASSWORD)
+        super().save_model(request, obj, form, change)
+
+
+admin.site.unregister(User)
+admin.site.register(User, DefaultPasswordUserAdmin)
+
+
+@admin.register(UserSecurityProfile)
+class UserSecurityProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "must_change_password")
+    search_fields = ("user__username",)
 
 
 class MeetingTimeInline(admin.TabularInline):

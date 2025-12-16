@@ -32,16 +32,16 @@
    python manage.py bootstrap_demo
    ```
    该命令会生成：
-   - 超级管理员：`admin / admin123`
-   - 教师：`carol`、`dave`（默认密码 `demo123`）
-   - 学生：`alice`、`bob`（默认密码 `demo123`）
+   - 超级管理员：`admin`（初始密码统一为 `ChangeMe123!`）
+   - 教师：`carol`、`dave`（初始密码 `ChangeMe123!`）
+   - 学生：`alice`、`bob`（初始密码 `ChangeMe123!`）
    - 课程、先修课、教学班及上课时间；Alice/Bob 的选课与成绩示例
 
 4. **运行开发服务器并进入后台**
    ```bash
    python manage.py runserver 0.0.0.0:8000
    ```
-   浏览器访问 `http://127.0.0.1:8000/admin/`，使用 `admin/admin123` 登录，即可看到院系、课程、教学班、上课时间、学生、教师、选课记录等模块并进行维护。
+   浏览器访问 `http://127.0.0.1:8000/admin/`，使用 `admin/ChangeMe123!` 登录（系统会提示首次修改密码），即可看到院系、课程、教学班、上课时间、学生、教师、选课记录等模块并进行维护。
 
 ## 关键模型与规则
 - **StudentProfile / InstructorProfile**：与 Django User 绑定的一对一档案，存储性别、院系、联系方式、专业/职称等。
