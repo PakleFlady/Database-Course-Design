@@ -1,6 +1,7 @@
 """Views for authentication helpers and self-service portals."""
 from __future__ import annotations
 
+import csv
 from collections import defaultdict
 
 from django.contrib import messages
@@ -12,14 +13,20 @@ from django.contrib.auth.views import (
     PasswordChangeDoneView,
     PasswordChangeView,
 )
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 
-from .forms import ApprovalDecisionForm, SelfServiceRequestForm
+from .forms import (
+    AdminBulkEnrollmentForm,
+    ApprovalDecisionForm,
+    InstructorAuthenticationForm,
+    SelfServiceRequestForm,
+    StudentAuthenticationForm,
+)
 from .models import (
     ApprovalLog,
     CoursePrerequisite,
@@ -63,6 +70,7 @@ class StudentLoginView(LoginView):
     template_name = "registration/student_login.html"
     redirect_authenticated_user = True
     extra_context = {"role_label": "学生", "switch_url_name": "instructor_login"}
+    authentication_form = StudentAuthenticationForm
 
     def get_success_url(self):
         redirect_to = self.get_redirect_url()
@@ -73,6 +81,7 @@ class InstructorLoginView(LoginView):
     template_name = "registration/instructor_login.html"
     redirect_authenticated_user = True
     extra_context = {"role_label": "教师", "switch_url_name": "student_login"}
+    authentication_form = InstructorAuthenticationForm
 
     def get_success_url(self):
         redirect_to = self.get_redirect_url()
@@ -95,6 +104,8 @@ class AccountHomeView(LoginRequiredMixin, TemplateView):
 
 class UserLogoutView(LogoutView):
     """Always redirect to the login portal to avoid template lookups."""
+
+    next_page = reverse_lazy("login_portal")
 
     def get_next_page(self):
         return reverse_lazy("login_portal")
@@ -122,9 +133,11 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
             error = handler(request_obj)
             if error:
                 form.add_error(None, error)
+                messages.error(request, error)
                 return self.render_to_response(self.get_context_data(form=form))
         else:
             request_obj.save()
+        messages.success(request, "请求已提交，请留意状态变更。")
         return redirect("student_home")
 
     def get_context_data(self, **kwargs):
@@ -274,6 +287,43 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
         return round(total_points / total_credits, 2)
 
 
+class StudentScheduleExportView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        if not hasattr(request.user, "student_profile"):
+            return HttpResponseForbidden("仅学生可导出课表")
+
+        enrollments = Enrollment.objects.filter(
+            student=request.user.student_profile,
+            status__in=["enrolling", "passed", "failed"],
+        ).values_list("section", flat=True)
+
+        meeting_times = MeetingTime.objects.filter(section_id__in=enrollments).select_related(
+            "section__course", "section__semester", "section__instructor__user"
+        )
+
+        response = HttpResponse(content_type="text/csv")
+        filename = f"schedule_{request.user.username}.csv"
+        response["Content-Disposition"] = f"attachment; filename={filename}"
+
+        writer = csv.writer(response)
+        writer.writerow(["星期", "时间", "课程", "教学班", "教师", "学期", "地点"])
+        for slot in meeting_times:
+            writer.writerow(
+                [
+                    slot.get_day_of_week_display(),
+                    f"{slot.start_time}-{slot.end_time}",
+                    slot.section.course.name,
+                    f"{slot.section.course.code}-S{slot.section.section_number}",
+                    slot.section.instructor.user.get_full_name()
+                    or slot.section.instructor.user.username,
+                    slot.section.semester.code,
+                    slot.location,
+                ]
+            )
+
+        return response
+
+
 class InstructorDashboardView(LoginRequiredMixin, TemplateView):
     template_name = "registration/dashboard_instructor.html"
 
@@ -352,7 +402,46 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
         context["sections"] = CourseSection.objects.select_related(
             "course", "semester", "instructor__user"
         ).order_by("semester__start_date")
+        context["bulk_form"] = kwargs.get("bulk_form") or AdminBulkEnrollmentForm()
         return context
+
+
+class AdminBulkEnrollmentView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            return HttpResponseForbidden("仅管理员可批量分配课程")
+
+        form = AdminBulkEnrollmentForm(request.POST)
+        if not form.is_valid():
+            return AdminDashboardView.as_view()(request, bulk_form=form)
+
+        section = form.cleaned_data["section"]
+        college = form.cleaned_data.get("college")
+        major = form.cleaned_data.get("major")
+
+        students = StudentProfile.objects.all()
+        if college:
+            students = students.filter(college__icontains=college)
+        if major:
+            students = students.filter(major__icontains=major)
+
+        created = 0
+        for student in students:
+            enrollment, created_flag = Enrollment.objects.update_or_create(
+                student=student,
+                section=section,
+                defaults={"status": "enrolling"},
+            )
+            created += int(created_flag)
+
+        if created:
+            messages.success(
+                request,
+                f"已为 {created} 名学生批量分配 {section.course.name}（{section.semester.code}）。",
+            )
+        else:
+            messages.info(request, "筛选范围内的学生已存在对应选课记录。")
+        return redirect("admin_home")
 
 
 class ApprovalQueueView(LoginRequiredMixin, TemplateView):

@@ -3,10 +3,32 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import AuthenticationForm
 
 from .models import CourseSection, Department, StudentProfile, StudentRequest, UserSecurity
 
 User = get_user_model()
+
+
+class _RoleAuthenticationForm(AuthenticationForm):
+    """Base form enforcing that a user matches the expected role."""
+
+    expected_role: str | None = None
+
+    def confirm_login_allowed(self, user):  # pragma: no cover - form hook
+        super().confirm_login_allowed(user)
+        if self.expected_role == "student" and not hasattr(user, "student_profile"):
+            raise forms.ValidationError("请使用学生账号登录此入口。", code="invalid_login")
+        if self.expected_role == "instructor" and not hasattr(user, "instructor_profile"):
+            raise forms.ValidationError("请使用教师账号登录此入口。", code="invalid_login")
+
+
+class StudentAuthenticationForm(_RoleAuthenticationForm):
+    expected_role = "student"
+
+
+class InstructorAuthenticationForm(_RoleAuthenticationForm):
+    expected_role = "instructor"
 
 
 class UserCreationWithProfileForm(forms.ModelForm):
@@ -123,3 +145,17 @@ class ApprovalDecisionForm(forms.Form):
 
     decision = forms.ChoiceField(label="审批结果", choices=DECISIONS)
     note = forms.CharField(label="审核意见", required=False, widget=forms.Textarea)
+
+
+class AdminBulkEnrollmentForm(forms.Form):
+    section = forms.ModelChoiceField(label="教学班", queryset=CourseSection.objects.select_related("course", "semester"))
+    college = forms.CharField(label="学院", required=False)
+    major = forms.CharField(label="班级/专业", required=False)
+
+    def clean(self):
+        cleaned = super().clean()
+        college = cleaned.get("college")
+        major = cleaned.get("major")
+        if not college and not major:
+            raise forms.ValidationError("请至少填写学院或班级条件。")
+        return cleaned

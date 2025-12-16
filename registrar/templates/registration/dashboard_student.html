@@ -51,7 +51,10 @@
 </div>
 
 <div class="section">
-  <h2>上课时间安排</h2>
+  <h2 style="display:flex; justify-content: space-between; align-items: center; gap: 12px;">
+    <span>上课时间安排</span>
+    <a class="button secondary" href="{% url 'student_schedule_export' %}">导出课表</a>
+  </h2>
   <table>
     <thead>
       <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">

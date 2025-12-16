@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.conf import settings
 
 from registrar.models import (
     Course,
@@ -15,6 +16,7 @@ from registrar.models import (
     MeetingTime,
     Semester,
     StudentProfile,
+    UserSecurity,
 )
 
 User = get_user_model()
@@ -81,8 +83,12 @@ class Command(BaseCommand):
             grace_user,
         ):
             if not user.has_usable_password():
-                user.set_password("12345678")
+                user.set_password(settings.DEFAULT_INITIAL_PASSWORD)
                 user.save()
+            security, _ = UserSecurity.objects.get_or_create(user=user)
+            if not user.is_staff and not user.is_superuser:
+                security.must_change_password = True
+                security.save(update_fields=["must_change_password"])
 
         carol_profile, _ = InstructorProfile.objects.get_or_create(user=carol_user, defaults={"department": cse, "title": "副教授"})
         dave_profile, _ = InstructorProfile.objects.get_or_create(user=dave_user, defaults={"department": math, "title": "讲师"})

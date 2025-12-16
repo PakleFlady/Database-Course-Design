@@ -4,6 +4,7 @@ from django.urls import path
 
 from registrar.views import (
     AccountHomeView,
+    AdminBulkEnrollmentView,
     ForcePasswordChangeDoneView,
     ForcePasswordChangeView,
     InstructorLoginView,
@@ -13,6 +14,7 @@ from registrar.views import (
     ApprovalQueueView,
     StudentLoginView,
     StudentDashboardView,
+    StudentScheduleExportView,
     InstructorDashboardView,
     UserLogoutView,
     InstructorGradeUpdateView,
@@ -31,6 +33,11 @@ urlpatterns = [
     path("accounts/logout/", UserLogoutView.as_view(), name="logout"),
     path("accounts/home/", AccountHomeView.as_view(), name="account_home"),
     path("accounts/home/student/", StudentDashboardView.as_view(), name="student_home"),
+    path(
+        "accounts/home/student/schedule/export/",
+        StudentScheduleExportView.as_view(),
+        name="student_schedule_export",
+    ),
     path("accounts/home/instructor/", InstructorDashboardView.as_view(), name="instructor_home"),
     path(
         "accounts/home/instructor/sections/<int:section_id>/grade/",
@@ -38,6 +45,7 @@ urlpatterns = [
         name="grade_update",
     ),
     path("accounts/home/admin/", AdminDashboardView.as_view(), name="admin_home"),
+    path("accounts/home/admin/bulk-enroll/", AdminBulkEnrollmentView.as_view(), name="admin_bulk_enroll"),
     path(
         "accounts/home/admin/sections/<int:section_id>/lock/",
         AdminSectionLockToggleView.as_view(),
