@@ -92,6 +92,20 @@ class InstructorProfile(models.Model):
         return f"{self.user.get_full_name() or self.user.username} ({self.department.code})"
 
 
+class ClassGroup(models.Model):
+    name = models.CharField("班级名称", max_length=100)
+    department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="class_groups", verbose_name="所属学院")
+
+    class Meta:
+        verbose_name = "班级"
+        verbose_name_plural = "班级"
+        unique_together = [("name", "department")]
+        ordering = ["department__code", "name"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.department.code}-{self.name}"
+
+
 class StudentProfile(models.Model):
     GENDER_CHOICES = [
         ("male", "男"),
@@ -104,9 +118,24 @@ class StudentProfile(models.Model):
     date_of_birth = models.DateField("出生日期", null=True, blank=True)
     contact_email = models.EmailField("联系邮箱", blank=True)
     contact_phone = models.CharField("联系电话", max_length=50, blank=True)
-    college = models.CharField("学院", max_length=255)
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="students",
+        verbose_name="学院",
+        null=True,
+        blank=True,
+    )
+    class_group = models.ForeignKey(
+        ClassGroup,
+        on_delete=models.PROTECT,
+        related_name="students",
+        verbose_name="班级",
+        null=True,
+        blank=True,
+    )
     major = models.CharField("专业", max_length=255)
-    student_number = models.CharField("学号", max_length=20, unique=True, null=True, blank=True)
+    student_number = models.CharField("学号", max_length=32, unique=True, null=True, blank=True)
 
     class Meta:
         verbose_name = "学生"
@@ -117,25 +146,26 @@ class StudentProfile(models.Model):
         return f"{self.user.get_full_name() or self.user.username} - {self.major}"
 
     @classmethod
-    def generate_student_number(cls) -> str:
-        """Generate a simple year-based student number like 20250001."""
+    def generate_student_number(cls, department_code: str) -> str:
+        """Generate a student number in the format <year><department_code><seq>."""
 
         year_prefix = datetime.date.today().year
+        base_prefix = f"{year_prefix}{department_code}"
         last_number = (
-            cls.objects.filter(student_number__startswith=str(year_prefix))
+            cls.objects.filter(student_number__startswith=base_prefix)
             .order_by("-student_number")
             .values_list("student_number", flat=True)
             .first()
         )
-        if last_number and last_number[-4:].isdigit():
-            sequence = int(last_number[-4:]) + 1
+        if last_number and last_number[-3:].isdigit():
+            sequence = int(last_number[-3:]) + 1
         else:
             sequence = 1
-        return f"{year_prefix}{sequence:04d}"
+        return f"{base_prefix}{sequence:03d}"
 
     def save(self, *args, **kwargs):
-        if not self.student_number:
-            self.student_number = self.generate_student_number()
+        if not self.student_number and self.department:
+            self.student_number = self.generate_student_number(self.department.code)
         super().save(*args, **kwargs)
 
 

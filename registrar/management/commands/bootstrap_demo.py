@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand
 from django.conf import settings
 
 from registrar.models import (
+    ClassGroup,
     Course,
     CoursePrerequisite,
     CourseSection,
@@ -31,6 +32,11 @@ class Command(BaseCommand):
         math, _ = Department.objects.get_or_create(code="MATH", defaults={"name": "数学系"})
         ee, _ = Department.objects.get_or_create(code="EE", defaults={"name": "电子与信息工程学院"})
         bus, _ = Department.objects.get_or_create(code="BUS", defaults={"name": "经济管理学院"})
+
+        cse_class_a, _ = ClassGroup.objects.get_or_create(name="软件2301", department=cse)
+        cse_class_b, _ = ClassGroup.objects.get_or_create(name="计科2301", department=cse)
+        ee_class_a, _ = ClassGroup.objects.get_or_create(name="信息2301", department=ee)
+        bus_class_a, _ = ClassGroup.objects.get_or_create(name="信管2301", department=bus)
 
         fall, _ = Semester.objects.get_or_create(
             code="2025FALL",
@@ -99,7 +105,8 @@ class Command(BaseCommand):
             user=alice_user,
             defaults={
                 "gender": "female",
-                "college": "计算机学院",
+                "department": cse,
+                "class_group": cse_class_a,
                 "major": "软件工程",
                 "contact_email": "alice@example.com",
             },
@@ -108,7 +115,8 @@ class Command(BaseCommand):
             user=bob_user,
             defaults={
                 "gender": "male",
-                "college": "计算机学院",
+                "department": cse,
+                "class_group": cse_class_b,
                 "major": "计算机科学与技术",
                 "contact_email": "bob@example.com",
             },
@@ -117,7 +125,8 @@ class Command(BaseCommand):
             user=charlie_user,
             defaults={
                 "gender": "male",
-                "college": "计算机学院",
+                "department": cse,
+                "class_group": cse_class_b,
                 "major": "人工智能",
                 "contact_email": "charlie@example.com",
             },
@@ -126,7 +135,8 @@ class Command(BaseCommand):
             user=diana_user,
             defaults={
                 "gender": "female",
-                "college": "软件学院",
+                "department": cse,
+                "class_group": cse_class_a,
                 "major": "软件工程",
                 "contact_email": "diana@example.com",
             },
@@ -135,7 +145,8 @@ class Command(BaseCommand):
             user=eric_user,
             defaults={
                 "gender": "male",
-                "college": "计算机学院",
+                "department": cse,
+                "class_group": cse_class_b,
                 "major": "数据科学",
                 "contact_email": "eric@example.com",
             },
@@ -144,7 +155,8 @@ class Command(BaseCommand):
             user=fiona_user,
             defaults={
                 "gender": "female",
-                "college": "电子与信息工程学院",
+                "department": ee,
+                "class_group": ee_class_a,
                 "major": "信息工程",
                 "contact_email": "fiona@example.com",
             },
@@ -153,7 +165,8 @@ class Command(BaseCommand):
             user=grace_user,
             defaults={
                 "gender": "female",
-                "college": "经济管理学院",
+                "department": bus,
+                "class_group": bus_class_a,
                 "major": "信息管理与信息系统",
                 "contact_email": "grace@example.com",
             },

@@ -8,6 +8,7 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from .forms import UserCreationWithProfileForm
 from .models import (
     ApprovalLog,
+    ClassGroup,
     Course,
     CoursePrerequisite,
     CourseSection,
@@ -39,7 +40,7 @@ class UserAdmin(DjangoUserAdmin):
                     "email",
                     "role",
                     "department",
-                    "college",
+                    "class_group",
                     "major",
                     "is_staff",
                     "is_superuser",
@@ -61,7 +62,7 @@ class MeetingTimeInline(admin.TabularInline):
 
 class EnrollMajorActionForm(ActionForm):
     major = forms.CharField(label="专业关键字", required=False)
-    college = forms.CharField(label="学院关键字", required=False)
+    department = forms.ModelChoiceField(label="学院", queryset=Department.objects.all(), required=False)
 
 
 @admin.register(CourseSection)
@@ -83,7 +84,7 @@ class CourseSectionAdmin(admin.ModelAdmin):
     @admin.action(description="为选定专业/学院的学生批量选课（受容量限制）")
     def enroll_students_by_major(self, request, queryset):
         major_keyword = request.POST.get("major")
-        college_keyword = request.POST.get("college")
+        department = request.POST.get("department") or None
 
         if not major_keyword:
             self.message_user(request, "请先在操作表单中填写要批量选课的专业关键字。", level=messages.ERROR)
@@ -91,8 +92,8 @@ class CourseSectionAdmin(admin.ModelAdmin):
 
         students = StudentProfile.objects.all()
         students = students.filter(major__icontains=major_keyword)
-        if college_keyword:
-            students = students.filter(college__icontains=college_keyword)
+        if department:
+            students = students.filter(department_id=department)
 
         if not students.exists():
             self.message_user(request, "未找到匹配的学生。", level=messages.WARNING)
@@ -148,8 +149,8 @@ class ApprovalLogAdmin(admin.ModelAdmin):
 
 @admin.register(StudentProfile)
 class StudentProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "student_number", "major", "college")
-    search_fields = ("user__username", "student_number", "major", "college")
+    list_display = ("user", "student_number", "major", "department", "class_group")
+    search_fields = ("user__username", "student_number", "major", "department__name", "class_group__name")
 
 
 @admin.register(InstructorProfile)
@@ -169,6 +170,12 @@ class CoursePrerequisiteAdmin(admin.ModelAdmin):
 class DepartmentAdmin(admin.ModelAdmin):
     list_display = ("code", "name")
     search_fields = ("code", "name")
+
+
+@admin.register(ClassGroup)
+class ClassGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "department")
+    search_fields = ("name", "department__name", "department__code")
 
 
 @admin.register(Semester)

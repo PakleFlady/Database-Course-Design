@@ -14,6 +14,7 @@ from django.contrib.auth.views import (
     PasswordChangeDoneView,
     PasswordChangeView,
 )
+from django.db.models import Count, Q
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
@@ -126,7 +127,52 @@ class UserLogoutView(LogoutView):
         return reverse_lazy("login_portal")
 
 
-class StudentDashboardView(LoginRequiredMixin, TemplateView):
+class EnrollmentValidationMixin:
+    def _validate_enrollment(self, student, section):
+        active_enrollments = Enrollment.objects.filter(
+            student=student,
+            status="enrolling",
+        ).select_related("section__course")
+
+        planned_credits = sum(e.section.course.credits for e in active_enrollments) + section.course.credits
+        if planned_credits > 40:
+            return "选课后总学分不得超过 40 学分。"
+
+        current_count = Enrollment.objects.filter(section=section, status="enrolling").count()
+        if current_count >= section.capacity:
+            return "该教学班已满员，暂无法继续选课。"
+
+        new_slots = MeetingTime.objects.filter(section=section)
+        for slot in new_slots:
+            conflict = MeetingTime.objects.filter(
+                section__in=[e.section for e in active_enrollments],
+                day_of_week=slot.day_of_week,
+                start_time__lt=slot.end_time,
+                end_time__gt=slot.start_time,
+            )
+            if conflict.exists():
+                return "与已选课程存在时间冲突。"
+
+        missing = []
+        grade_order = {"A": 4, "B": 3, "C": 2, "D": 1, "P": 2, "F": 0, "NP": 0}
+        prereqs = CoursePrerequisite.objects.filter(course=section.course)
+        for prereq in prereqs:
+            record = Enrollment.objects.filter(
+                student=student,
+                section__course=prereq.prerequisite,
+                final_grade__isnull=False,
+            ).first()
+            if not record:
+                missing.append(prereq.prerequisite.code)
+                continue
+            if grade_order.get(record.final_grade, 0) < grade_order.get(prereq.min_grade, 0):
+                missing.append(prereq.prerequisite.code)
+        if missing:
+            return "未满足先修要求：" + ", ".join(missing)
+        return None
+
+
+class StudentDashboardView(LoginRequiredMixin, EnrollmentValidationMixin, TemplateView):
     template_name = "registration/dashboard_student.html"
 
     def dispatch(self, request, *args, **kwargs):
@@ -157,11 +203,12 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        request_qs = StudentRequest.objects.filter(student=self.request.user.student_profile).select_related(
+        profile = self.request.user.student_profile
+        request_qs = StudentRequest.objects.filter(student=profile).select_related(
             "section__course", "section__semester"
         )
         enrollments = list(
-            Enrollment.objects.filter(student=self.request.user.student_profile)
+            Enrollment.objects.filter(student=profile)
             .select_related("section__course", "section__semester")
             .order_by("section__semester__start_date")
         )
@@ -179,9 +226,9 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
             "rejected": request_qs.filter(status="rejected").count(),
         }
         context["enrollments"] = enrollments
-        context["available_sections"] = CourseSection.objects.select_related(
-            "course", "semester", "instructor__user"
-        )
+        context["available_section_count"] = CourseSection.objects.filter(
+            course__department=profile.department
+        ).count()
         context["gpa"] = self._calculate_gpa(enrollments)
         context["credit_load"] = sum(
             enrollment.section.course.credits
@@ -196,13 +243,86 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
             for enrollment in enrollments
             if enrollment.status == "failed" or enrollment.final_grade in ["F", "NP"]
         ]
-        context["profile"] = self.request.user.student_profile
+        context["profile"] = profile
         return context
+
+
+class StudentEnrollmentView(LoginRequiredMixin, EnrollmentValidationMixin, TemplateView):
+    template_name = "registration/course_selection.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not hasattr(request.user, "student_profile"):
+            return HttpResponseForbidden("仅学生可访问此页面")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        profile = self.request.user.student_profile
+        enrollments = Enrollment.objects.filter(student=profile, status="enrolling").select_related(
+            "section__course", "section__semester", "section__instructor__user"
+        )
+        available_sections = (
+            CourseSection.objects.filter(course__department=profile.department)
+            .select_related("course", "semester", "instructor__user")
+            .prefetch_related("meeting_times")
+            .annotate(
+                enrolled_count=Count(
+                    "enrollments", filter=Q(enrollments__status="enrolling"), distinct=True
+                )
+            )
+            .order_by("course__code", "section_number")
+        )
+
+        context["profile"] = profile
+        context["enrollments"] = enrollments
+        context["available_sections"] = available_sections
+        context["enrollment_ids"] = [e.section_id for e in enrollments]
+        return context
+
+    def post(self, request, *args, **kwargs):
+        if not hasattr(request.user, "student_profile"):
+            return HttpResponseForbidden("仅学生可访问此页面")
+
+        action = request.POST.get("action")
+        section_id = request.POST.get("section_id")
+        profile = request.user.student_profile
+
+        try:
+            section = CourseSection.objects.select_related("course").get(pk=section_id)
+        except CourseSection.DoesNotExist:
+            messages.error(request, "未找到教学班。")
+            return redirect("student_enrollment")
+
+        if section.course.department != profile.department:
+            messages.error(request, "只能选择本学院开设的课程。")
+            return redirect("student_enrollment")
+
+        if action == "enroll":
+            error = self._validate_enrollment(profile, section)
+            if error:
+                messages.error(request, error)
+                return redirect("student_enrollment")
+            Enrollment.objects.update_or_create(
+                student=profile,
+                section=section,
+                defaults={"status": "enrolling"},
+            )
+            messages.success(request, "选课成功，已加入课堂。")
+        elif action == "drop":
+            try:
+                enrollment = Enrollment.objects.get(student=profile, section=section, status="enrolling")
+            except Enrollment.DoesNotExist:
+                messages.error(request, "尚未选该课程或已退课。")
+                return redirect("student_enrollment")
+            enrollment.status = "dropped"
+            enrollment.save(update_fields=["status"])
+            messages.success(request, "已退选该课程。")
+        else:
+            messages.error(request, "未知操作。")
+        return redirect("student_enrollment")
 
     def _get_handler(self, request_type):
         handlers = {
-            "enroll": self._handle_enrollment,
-            "drop": self._handle_drop,
             "retake": self._handle_pending,
             "cross_college": self._handle_pending,
             "credit_overload": self._handle_pending,
@@ -363,7 +483,7 @@ class InstructorDashboardView(LoginRequiredMixin, TemplateView):
         sections = list(
             CourseSection.objects.filter(instructor=instructor)
             .select_related("course", "semester")
-            .prefetch_related("meetingtime_set")
+            .prefetch_related("meeting_times")
         )
         pending_requests = StudentRequest.objects.filter(
             section__in=sections,
@@ -441,12 +561,15 @@ class AdminBulkEnrollmentView(LoginRequiredMixin, View):
             return AdminDashboardView.as_view()(request, bulk_form=form)
 
         section = form.cleaned_data["section"]
-        college = form.cleaned_data.get("college")
+        department = form.cleaned_data.get("department")
+        class_group = form.cleaned_data.get("class_group")
         major = form.cleaned_data.get("major")
 
         students = StudentProfile.objects.all()
-        if college:
-            students = students.filter(college__icontains=college)
+        if department:
+            students = students.filter(department=department)
+        if class_group:
+            students = students.filter(class_group=class_group)
         if major:
             students = students.filter(major__icontains=major)
 

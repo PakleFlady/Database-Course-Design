@@ -9,6 +9,7 @@ from registrar.views import (
     ForcePasswordChangeView,
     InstructorLoginView,
     LoginPortalView,
+    StudentEnrollmentView,
     AdminDashboardView,
     ApprovalDecisionView,
     ApprovalQueueView,
@@ -33,6 +34,11 @@ urlpatterns = [
     path("accounts/logout/", UserLogoutView.as_view(), name="logout"),
     path("accounts/home/", AccountHomeView.as_view(), name="account_home"),
     path("accounts/home/student/", StudentDashboardView.as_view(), name="student_home"),
+    path(
+        "accounts/home/student/enrollment/",
+        StudentEnrollmentView.as_view(),
+        name="student_enrollment",
+    ),
     path(
         "accounts/home/student/schedule/export/",
         StudentScheduleExportView.as_view(),

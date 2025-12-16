@@ -5,7 +5,14 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 
-from .models import CourseSection, Department, StudentProfile, StudentRequest, UserSecurity
+from .models import (
+    ClassGroup,
+    CourseSection,
+    Department,
+    StudentProfile,
+    StudentRequest,
+    UserSecurity,
+)
 
 User = get_user_model()
 
@@ -44,7 +51,7 @@ class UserCreationWithProfileForm(forms.ModelForm):
     department = forms.ModelChoiceField(
         label="所属院系", queryset=Department.objects.all(), required=False
     )
-    college = forms.CharField(label="学院", required=False)
+    class_group = forms.ModelChoiceField(label="班级", queryset=None, required=False)
     major = forms.CharField(label="专业", required=False)
 
     class Meta:
@@ -61,17 +68,23 @@ class UserCreationWithProfileForm(forms.ModelForm):
             "user_permissions",
         )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["class_group"].queryset = ClassGroup.objects.select_related("department")
+
     def clean(self):
         cleaned = super().clean()
         role = cleaned.get("role")
         department = cleaned.get("department")
-        college = cleaned.get("college")
+        class_group = cleaned.get("class_group")
         major = cleaned.get("major")
 
         if role == "instructor" and not department:
             raise forms.ValidationError("创建教师账号时必须选择所属院系。")
-        if role == "student" and (not college or not major):
+        if role == "student" and (not department or not major):
             raise forms.ValidationError("创建学生账号时需填写学院与专业。")
+        if class_group and class_group.department != department:
+            raise forms.ValidationError("班级必须隶属于所选学院。")
         return cleaned
 
     def save(self, commit: bool = True):
@@ -85,15 +98,17 @@ class UserCreationWithProfileForm(forms.ModelForm):
 
             role = self.cleaned_data.get("role")
             department = self.cleaned_data.get("department")
-            college = self.cleaned_data.get("college")
+            class_group = self.cleaned_data.get("class_group")
             major = self.cleaned_data.get("major")
 
             if role == "instructor" and department:
                 from .models import InstructorProfile
 
                 InstructorProfile.objects.create(user=user, department=department)
-            elif role == "student" and college and major:
-                StudentProfile.objects.create(user=user, college=college, major=major)
+            elif role == "student" and department and major:
+                StudentProfile.objects.create(
+                    user=user, department=department, class_group=class_group, major=major
+                )
 
             security, _ = UserSecurity.objects.get_or_create(user=user)
             if user.is_staff or user.is_superuser:
@@ -116,14 +131,21 @@ class SelfServiceRequestForm(forms.ModelForm):
     def __init__(self, *args, student=None, **kwargs):
         self.student = student
         super().__init__(*args, **kwargs)
-        self.fields["section"].queryset = CourseSection.objects.select_related("course", "semester").all()
+        allowed_types = {"retake", "cross_college", "credit_overload"}
+        self.fields["request_type"].choices = [
+            choice for choice in StudentRequest.REQUEST_TYPE_CHOICES if choice[0] in allowed_types
+        ]
+        queryset = CourseSection.objects.select_related("course", "semester")
+        if student and student.department:
+            queryset = queryset.filter(course__department=student.department)
+        self.fields["section"].queryset = queryset
         self.fields["section"].required = False
 
     def clean(self):
         cleaned = super().clean()
         request_type = cleaned.get("request_type")
         section = cleaned.get("section")
-        if request_type in {"enroll", "drop", "retake", "cross_college"} and not section:
+        if request_type in {"retake", "cross_college"} and not section:
             raise forms.ValidationError("请选择要办理的教学班。")
         if not self.student:
             raise forms.ValidationError("仅学生账号可提交申请。")
@@ -149,13 +171,19 @@ class ApprovalDecisionForm(forms.Form):
 
 class AdminBulkEnrollmentForm(forms.Form):
     section = forms.ModelChoiceField(label="教学班", queryset=CourseSection.objects.select_related("course", "semester"))
-    college = forms.CharField(label="学院", required=False)
+    department = forms.ModelChoiceField(
+        label="学院", queryset=Department.objects.all(), required=False
+    )
+    class_group = forms.ModelChoiceField(label="班级", queryset=ClassGroup.objects.select_related("department"), required=False)
     major = forms.CharField(label="班级/专业", required=False)
 
     def clean(self):
         cleaned = super().clean()
-        college = cleaned.get("college")
+        department = cleaned.get("department")
+        class_group = cleaned.get("class_group")
         major = cleaned.get("major")
-        if not college and not major:
+        if class_group and department and class_group.department != department:
+            raise forms.ValidationError("班级必须属于所选学院。")
+        if not department and not class_group and not major:
             raise forms.ValidationError("请至少填写学院或班级条件。")
         return cleaned

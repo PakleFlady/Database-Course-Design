@@ -20,14 +20,16 @@
     {{ bulk_form.section }}
     <div class="grid two">
       <div>
-        <label for="id_college">学院（关键词匹配）</label>
-        {{ bulk_form.college }}
+        <label for="id_department">学院</label>
+        {{ bulk_form.department }}
       </div>
       <div>
-        <label for="id_major">班级/专业（关键词匹配）</label>
-        {{ bulk_form.major }}
+        <label for="id_class_group">班级</label>
+        {{ bulk_form.class_group }}
       </div>
     </div>
+    <label for="id_major">班级/专业（关键词匹配，可选）</label>
+    {{ bulk_form.major }}
     <button class="button" type="submit">批量分配</button>
   </form>
 </div>
