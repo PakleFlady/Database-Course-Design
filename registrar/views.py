@@ -120,12 +120,21 @@ class AccountHomeView(LoginRequiredMixin, TemplateView):
         return super().get(request, *args, **kwargs)
 
 
-class UserLogoutView(LogoutView):
-    """Show a friendly logout confirmation page instead of silent redirect."""
+class UserLogoutView(LoginRequiredMixin, View):
+    """Handle logout via GET/POST and always send users back to the 登录入口."""
 
-    # 始终回到登录入口，方便用户在退出后立即选择学生或教师身份重新登录
-    next_page = reverse_lazy("login_portal")
-    template_name = "registration/logout_success.html"
+    redirect_target = reverse_lazy("login_portal")
+
+    def _logout_and_redirect(self, request):
+        logout(request)
+        return redirect(self.redirect_target)
+
+    # Django 5.0 默认不再允许 GET 请求注销，这里显式支持，避免 405 报错
+    def get(self, request, *args, **kwargs):
+        return self._logout_and_redirect(request)
+
+    def post(self, request, *args, **kwargs):
+        return self._logout_and_redirect(request)
 
 
 class EnrollmentValidationMixin:
