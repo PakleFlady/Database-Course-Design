@@ -1,6 +1,8 @@
 """Django models for the course registration and grade management domain."""
 from __future__ import annotations
 
+import datetime
+
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import F, Q
@@ -104,14 +106,37 @@ class StudentProfile(models.Model):
     contact_phone = models.CharField("联系电话", max_length=50, blank=True)
     college = models.CharField("学院", max_length=255)
     major = models.CharField("专业", max_length=255)
+    student_number = models.CharField("学号", max_length=20, unique=True, null=True, blank=True)
 
     class Meta:
         verbose_name = "学生"
         verbose_name_plural = "学生"
-        ordering = ["user__username"]
+        ordering = ["student_number", "user__username"]
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.user.get_full_name() or self.user.username} - {self.major}"
+
+    @classmethod
+    def generate_student_number(cls) -> str:
+        """Generate a simple year-based student number like 20250001."""
+
+        year_prefix = datetime.date.today().year
+        last_number = (
+            cls.objects.filter(student_number__startswith=str(year_prefix))
+            .order_by("-student_number")
+            .values_list("student_number", flat=True)
+            .first()
+        )
+        if last_number and last_number[-4:].isdigit():
+            sequence = int(last_number[-4:]) + 1
+        else:
+            sequence = 1
+        return f"{year_prefix}{sequence:04d}"
+
+    def save(self, *args, **kwargs):
+        if not self.student_number:
+            self.student_number = self.generate_student_number()
+        super().save(*args, **kwargs)
 
 
 class CourseSection(models.Model):

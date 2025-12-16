@@ -233,8 +233,8 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
 
         # credit load check
         planned_credits = sum(e.section.course.credits for e in active_enrollments) + section.course.credits
-        if planned_credits < 10 or planned_credits > 40:
-            return "选课后总学分需在 10-40 之间。"
+        if planned_credits > 40:
+            return "选课后总学分不得超过 40 学分。"
 
         # capacity check
         current_count = Enrollment.objects.filter(section=section, status="enrolling").count()
