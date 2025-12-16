@@ -44,6 +44,8 @@
    ```
     浏览器访问 `http://127.0.0.1:8000/accounts/login/` 选择“学生/教师登录”，或直接访问 `http://127.0.0.1:8000/admin/` 使用 `admin/admin123` 登录，即可看到院系、课程、教学班、上课时间、学生、教师、选课记录等模块并进行维护。学生/教师门户提供 GPA 统计、课表、审批状态、成绩录入等完整界面。
 
+更多日常操作（登录入口、选课/审批流程、默认密码策略等）可参见《[功能操作说明](docs/feature_usage.md)》。
+
 ## 关键模型与规则
 - **StudentProfile / InstructorProfile**：与 Django User 绑定的一对一档案，存储性别、院系、联系方式、专业/职称等。
 - **Course / CourseSection / MeetingTime**：课程、教学班、上课时间（含“结束时间必须晚于开始时间”的校验）。

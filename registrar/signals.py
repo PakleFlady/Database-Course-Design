@@ -15,7 +15,7 @@ User = get_user_model()
 def ensure_security_profile(sender, instance: User, created: bool, **kwargs):
     security, created_security = UserSecurity.objects.get_or_create(user=instance)
 
-    if not instance.has_usable_password():
+    if not instance.password or not instance.has_usable_password():
         instance.set_password(getattr(settings, "DEFAULT_INITIAL_PASSWORD", "12345678"))
         instance.save(update_fields=["password"])
 

@@ -82,9 +82,9 @@ class Command(BaseCommand):
             fiona_user,
             grace_user,
         ):
-            if not user.has_usable_password():
+            if not user.password or not user.has_usable_password():
                 user.set_password(settings.DEFAULT_INITIAL_PASSWORD)
-                user.save()
+                user.save(update_fields=["password"])
             security, _ = UserSecurity.objects.get_or_create(user=user)
             if not user.is_staff and not user.is_superuser:
                 security.must_change_password = True
