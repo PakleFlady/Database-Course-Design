@@ -1,0 +1,38 @@
+<div class="panel-body">
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>类型</th>
+        <th>教学班</th>
+        <th>状态</th>
+        <th>提交时间</th>
+        <th>审核记录</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in requests %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ item.get_request_type_display }}</td>
+        <td>{% if item.section %}{{ item.section.course.name }} ({{ item.section.semester.code }}){% else %}-{% endif %}</td>
+        <td>{{ item.get_status_display }}</td>
+        <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+        <td>
+          {% with logs=item.logs.all %}
+            {% if logs|length %}
+              <ul style="margin:0; padding-left: 16px; color: var(--muted);">
+                {% for log in logs %}
+                  <li>{{ log.get_action_display }} by {{ log.actor }} - {{ log.created_at|date:"Y-m-d H:i" }} {% if log.note %}（{{ log.note }}）{% endif %}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              -
+            {% endif %}
+          {% endwith %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂无申请记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

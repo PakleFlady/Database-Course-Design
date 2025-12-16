@@ -12,12 +12,12 @@
 
 <div class="section">
   <h2>按学院/班级批量分配课程</h2>
-  <div class="hint">为同一学院或班级的学生批量创建选课记录，避免逐一添加。</div>
+  <div class="hint">为同一学院或班级的学生批量创建选课记录，可一次选择多个教学班完成排课。</div>
   <form method="post" action="{% url 'admin_bulk_enroll' %}">
     {% csrf_token %}
     {{ bulk_form.non_field_errors }}
-    <label for="id_section">教学班</label>
-    {{ bulk_form.section }}
+    <label for="id_sections">教学班（可多选）</label>
+    {{ bulk_form.sections }}
     <div class="grid two">
       <div>
         <label for="id_department">学院</label>

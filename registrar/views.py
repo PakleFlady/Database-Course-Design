@@ -16,7 +16,7 @@ from django.contrib.auth.views import (
 )
 from django.db.models import Count, Q, F
 from django.db.models.functions import Greatest
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -262,6 +262,80 @@ class StudentDashboardView(LoginRequiredMixin, EnrollmentValidationMixin, Templa
         ]
         context["profile"] = profile
         return context
+
+
+class StudentFeatureView(StudentDashboardView):
+    template_name = "registration/student_feature.html"
+
+    FEATURE_MAP = {
+        "profile": {
+            "title": "个人档案",
+            "template": "registration/partials/student_profile_panel.html",
+            "description": "查看并确认个人信息、所属学院与联系方式。",
+        },
+        "selfservice": {
+            "title": "自助办理",
+            "template": "registration/partials/student_selfservice_panel.html",
+            "description": "提交跨院、超学分、重修等审批申请。",
+        },
+        "schedule": {
+            "title": "课表与导出",
+            "template": "registration/partials/student_schedule_panel.html",
+            "description": "查看已排课程并导出课表安排。",
+        },
+        "retake": {
+            "title": "成绩与重修",
+            "template": "registration/partials/student_retake_panel.html",
+            "description": "关注需重修课程以及已选课程成绩。",
+        },
+        "requests": {
+            "title": "申请进度",
+            "template": "registration/partials/student_requests_panel.html",
+            "description": "查看审批历史与日志记录。",
+        },
+    }
+
+    def get_feature_config(self):
+        feature = self.kwargs.get("feature")
+        config = self.FEATURE_MAP.get(feature)
+        if not config:
+            raise Http404("未找到对应功能")
+        return feature, config
+
+    def get_context_data(self, **kwargs):
+        feature, config = self.get_feature_config()
+        context = super().get_context_data(**kwargs)
+        context.update(
+            {
+                "feature_key": feature,
+                "feature_title": config["title"],
+                "feature_template": config["template"],
+                "feature_description": config.get("description", ""),
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        feature, _ = self.get_feature_config()
+        if feature != "selfservice":
+            return HttpResponseForbidden("该页面不支持提交")
+
+        form = SelfServiceRequestForm(request.POST, student=request.user.student_profile)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+
+        request_obj = form.save(commit=False)
+        handler = self._get_handler(request_obj.request_type)
+        if handler:
+            error = handler(request_obj)
+            if error:
+                form.add_error(None, error)
+                messages.error(request, error)
+                return self.render_to_response(self.get_context_data(form=form))
+        else:
+            request_obj.save()
+        messages.success(request, "请求已提交，请留意状态变更。")
+        return redirect("student_feature", feature="selfservice")
 
 
 class StudentEnrollmentView(LoginRequiredMixin, EnrollmentValidationMixin, TemplateView):
@@ -646,7 +720,7 @@ class AdminBulkEnrollmentView(LoginRequiredMixin, View):
         if not form.is_valid():
             return AdminDashboardView.as_view()(request, bulk_form=form)
 
-        section = form.cleaned_data["section"]
+        sections = form.cleaned_data["sections"]
         department = form.cleaned_data.get("department")
         class_group = form.cleaned_data.get("class_group")
         major = form.cleaned_data.get("major")
@@ -659,19 +733,30 @@ class AdminBulkEnrollmentView(LoginRequiredMixin, View):
         if major:
             students = students.filter(major__icontains=major)
 
-        created = 0
-        for student in students:
-            enrollment, created_flag = Enrollment.objects.update_or_create(
-                student=student,
-                section=section,
-                defaults={"status": "enrolling"},
-            )
-            created += int(created_flag)
+        if not students.exists():
+            messages.info(request, "未找到符合筛选条件的学生。")
+            return redirect("admin_home")
 
-        if created:
+        summary = []
+        for section in sections:
+            created = 0
+            for student in students:
+                _, created_flag = Enrollment.objects.update_or_create(
+                    student=student,
+                    section=section,
+                    defaults={"status": "enrolling"},
+                )
+                created += int(created_flag)
+            summary.append((section, created))
+
+        new_records = [item for item in summary if item[1] > 0]
+        if new_records:
             messages.success(
                 request,
-                f"已为 {created} 名学生批量分配 {section.course.name}（{section.semester.code}）。",
+                "；".join(
+                    f"已为 {count} 名学生分配 {section.course.name}（{section.semester.code}）"
+                    for section, count in new_records
+                ),
             )
         else:
             messages.info(request, "筛选范围内的学生已存在对应选课记录。")

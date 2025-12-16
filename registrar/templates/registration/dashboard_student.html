@@ -69,27 +69,27 @@
   <div class="feature-card">
     <h3>个人档案</h3>
     <p class="muted">查看基础信息与联系方式。</p>
-    <button class="button secondary" data-target="#panel-profile">打开界面</button>
+    <a class="button secondary" href="{% url 'student_feature' 'profile' %}">打开界面</a>
   </div>
   <div class="feature-card">
     <h3>自助办理</h3>
     <p class="muted">发起跨院、超学分等审批。</p>
-    <button class="button primary" data-target="#panel-selfservice">打开界面</button>
+    <a class="button primary" href="{% url 'student_feature' 'selfservice' %}">打开界面</a>
   </div>
   <div class="feature-card">
     <h3>课表与导出</h3>
     <p class="muted">展开查看本学期排课并导出。</p>
-    <button class="button secondary" data-target="#panel-schedule">打开界面</button>
+    <a class="button secondary" href="{% url 'student_feature' 'schedule' %}">打开界面</a>
   </div>
   <div class="feature-card">
     <h3>成绩与重修</h3>
     <p class="muted">关注未通过课程与已选成绩。</p>
-    <button class="button secondary" data-target="#panel-retake">打开界面</button>
+    <a class="button secondary" href="{% url 'student_feature' 'retake' %}">打开界面</a>
   </div>
   <div class="feature-card">
     <h3>申请进度</h3>
     <p class="muted">查看历史审批与日志。</p>
-    <button class="button secondary" data-target="#panel-requests">打开界面</button>
+    <a class="button secondary" href="{% url 'student_feature' 'requests' %}">打开界面</a>
   </div>
   <div class="feature-card">
     <h3>快捷入口</h3>
@@ -103,165 +103,27 @@
 
 <details class="feature-panel" id="panel-profile">
   <summary>个人档案</summary>
-  <div class="panel-body">
-    <div class="hint">
-      <strong>{{ profile.user.get_full_name|default:profile.user.username }}</strong> · {{ profile.get_gender_display|default:"未填写" }}<br />
-      <span class="muted">学院/专业：{{ profile.department.name|default:"-" }} / {{ profile.major|default:"-" }}</span><br />
-      <span class="muted">班级：{{ profile.class_group|default:"未分配班级" }}</span><br />
-      <span class="muted">联系方式：{{ profile.contact_email|default:"未填写邮箱" }} {% if profile.contact_phone %}/ {{ profile.contact_phone }}{% endif %}</span>
-    </div>
-  </div>
+  {% include "registration/partials/student_profile_panel.html" %}
 </details>
 
 <details class="feature-panel" id="panel-selfservice">
   <summary>自助办理</summary>
-  <div class="panel-body">
-    <div class="hint">
-      <strong>说明：</strong> 选课/退课已移至“选课中心”，此处仅用于提交重修、跨院、超学分等需审批的申请。
-    </div>
-    <form method="post">
-      {% csrf_token %}
-      {{ form.non_field_errors }}
-      <label for="id_request_type">办理事项</label>
-      {{ form.request_type }}
-      <label for="id_section">关联教学班</label>
-      {{ form.section }}
-      <label for="id_reason">说明/备注</label>
-      {{ form.reason }}
-      <input class="button" type="submit" value="提交申请" />
-    </form>
-  </div>
+  {% include "registration/partials/student_selfservice_panel.html" %}
 </details>
 
 <details class="feature-panel" id="panel-schedule">
   <summary>上课时间安排</summary>
-  <div class="panel-body">
-    <div style="display:flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom:8px;">
-      <span class="muted">展开查看详细排课信息。</span>
-      <a class="button secondary" href="{% url 'student_schedule_export' %}">导出课表</a>
-    </div>
-    <table>
-      <thead>
-        <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
-          <th>星期</th>
-          <th>时间</th>
-          <th>课程</th>
-          <th>学期</th>
-          <th>地点</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for slot in schedule %}
-        <tr style="border-bottom:1px solid #f1f5f9;">
-          <td>{{ slot.get_day_of_week_display }}</td>
-          <td>{{ slot.start_time }} - {{ slot.end_time }}</td>
-          <td>{{ slot.section.course.code }} {{ slot.section.course.name }}</td>
-          <td>{{ slot.section.semester.code }}</td>
-          <td>{{ slot.location|default:"待定" }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5">暂未有课表安排</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  {% include "registration/partials/student_schedule_panel.html" %}
 </details>
 
 <details class="feature-panel" id="panel-retake">
   <summary>需关注/重修课程与成绩</summary>
-  <div class="panel-body">
-    <h3 style="margin-top:0;">需关注/重修课程</h3>
-    <table>
-      <thead>
-        <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
-          <th>课程</th>
-          <th>学期</th>
-          <th>状态</th>
-          <th>成绩</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for enrollment in failed_enrollments %}
-        <tr style="border-bottom:1px solid #f1f5f9;">
-          <td>{{ enrollment.section.course.name }}</td>
-          <td>{{ enrollment.section.semester.code }}</td>
-          <td>{{ enrollment.get_status_display }}</td>
-          <td>{{ enrollment.final_grade|default:"-" }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="4">暂无需重修的课程</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    <h3>已选课程与成绩</h3>
-    <table>
-      <thead>
-        <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
-          <th>课程</th>
-          <th>学期</th>
-          <th>状态</th>
-          <th>成绩</th>
-          <th>绩点</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for enrollment in enrollments %}
-        <tr style="border-bottom:1px solid #f1f5f9;">
-          <td>{{ enrollment.section.course.name }}</td>
-          <td>{{ enrollment.section.semester.code }}</td>
-          <td>{{ enrollment.get_status_display }}</td>
-          <td>{{ enrollment.final_grade|default:"-" }}</td>
-          <td>{{ enrollment.grade_points|default:"-" }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5">暂未有选课记录</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  {% include "registration/partials/student_retake_panel.html" %}
 </details>
 
 <details class="feature-panel" id="panel-requests">
   <summary>我的申请与日志</summary>
-  <div class="panel-body">
-    <table>
-      <thead>
-        <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
-          <th>类型</th>
-          <th>教学班</th>
-          <th>状态</th>
-          <th>提交时间</th>
-          <th>审核记录</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in requests %}
-        <tr style="border-bottom:1px solid #f1f5f9;">
-          <td>{{ item.get_request_type_display }}</td>
-          <td>{% if item.section %}{{ item.section.course.name }} ({{ item.section.semester.code }}){% else %}-{% endif %}</td>
-          <td>{{ item.get_status_display }}</td>
-          <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
-          <td>
-            {% with logs=item.logs.all %}
-              {% if logs|length %}
-                <ul style="margin:0; padding-left: 16px; color: var(--muted);">
-                  {% for log in logs %}
-                    <li>{{ log.get_action_display }} by {{ log.actor }} - {{ log.created_at|date:"Y-m-d H:i" }} {% if log.note %}（{{ log.note }}）{% endif %}</li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                -
-              {% endif %}
-            {% endwith %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5">暂无申请记录</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  {% include "registration/partials/student_requests_panel.html" %}
 </details>
 
 <div class="actions" style="justify-content: space-between; flex-wrap: wrap; gap: 12px;">
@@ -272,14 +134,4 @@
   <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
 </div>
 
-<script>
-  document.querySelectorAll('[data-target]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      const target = document.querySelector(btn.dataset.target);
-      if (!target) return;
-      target.open = true;
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  });
-</script>
 {% endblock %}

@@ -1,0 +1,30 @@
+<div class="panel-body">
+  <div style="display:flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom:8px;">
+    <span class="muted">展开查看详细排课信息。</span>
+    <a class="button secondary" href="{% url 'student_schedule_export' %}">导出课表</a>
+  </div>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>星期</th>
+        <th>时间</th>
+        <th>课程</th>
+        <th>学期</th>
+        <th>地点</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for slot in schedule %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ slot.get_day_of_week_display }}</td>
+        <td>{{ slot.start_time }} - {{ slot.end_time }}</td>
+        <td>{{ slot.section.course.code }} {{ slot.section.course.name }}</td>
+        <td>{{ slot.section.semester.code }}</td>
+        <td>{{ slot.location|default:"待定" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂未有课表安排</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

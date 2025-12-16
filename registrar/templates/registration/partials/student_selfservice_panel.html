@@ -1,0 +1,16 @@
+<div class="panel-body">
+  <div class="hint">
+    <strong>说明：</strong> 选课/退课已移至“选课中心”，此处仅用于提交重修、跨院、超学分等需审批的申请。
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <label for="id_request_type">办理事项</label>
+    {{ form.request_type }}
+    <label for="id_section">关联教学班</label>
+    {{ form.section }}
+    <label for="id_reason">说明/备注</label>
+    {{ form.reason }}
+    <input class="button" type="submit" value="提交申请" />
+  </form>
+</div>

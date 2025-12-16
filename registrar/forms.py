@@ -170,7 +170,10 @@ class ApprovalDecisionForm(forms.Form):
 
 
 class AdminBulkEnrollmentForm(forms.Form):
-    section = forms.ModelChoiceField(label="教学班", queryset=CourseSection.objects.select_related("course", "semester"))
+    sections = forms.ModelMultipleChoiceField(
+        label="教学班（可多选）",
+        queryset=CourseSection.objects.select_related("course", "semester"),
+    )
     department = forms.ModelChoiceField(
         label="学院", queryset=Department.objects.all(), required=False
     )
@@ -179,6 +182,8 @@ class AdminBulkEnrollmentForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        if not cleaned.get("sections"):
+            raise forms.ValidationError("请至少选择一个教学班。")
         department = cleaned.get("department")
         class_group = cleaned.get("class_group")
         major = cleaned.get("major")

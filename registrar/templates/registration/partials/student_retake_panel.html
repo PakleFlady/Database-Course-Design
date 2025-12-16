@@ -1,0 +1,51 @@
+<div class="panel-body">
+  <h3 style="margin-top:0;">需关注/重修课程</h3>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>学期</th>
+        <th>状态</th>
+        <th>成绩</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for enrollment in failed_enrollments %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ enrollment.section.course.name }}</td>
+        <td>{{ enrollment.section.semester.code }}</td>
+        <td>{{ enrollment.get_status_display }}</td>
+        <td>{{ enrollment.final_grade|default:"-" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">暂无需重修的课程</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>已选课程与成绩</h3>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>学期</th>
+        <th>状态</th>
+        <th>成绩</th>
+        <th>绩点</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for enrollment in enrollments %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ enrollment.section.course.name }}</td>
+        <td>{{ enrollment.section.semester.code }}</td>
+        <td>{{ enrollment.get_status_display }}</td>
+        <td>{{ enrollment.final_grade|default:"-" }}</td>
+        <td>{{ enrollment.grade_points|default:"-" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂未有选课记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
