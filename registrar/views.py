@@ -246,6 +246,59 @@ class StudentDashboardView(LoginRequiredMixin, EnrollmentValidationMixin, Templa
         context["profile"] = profile
         return context
 
+    def _get_handler(self, request_type):
+        handlers = {
+            "retake": self._handle_pending,
+            "cross_college": self._handle_pending,
+            "credit_overload": self._handle_pending,
+        }
+        return handlers.get(request_type)
+
+    def _handle_pending(self, request_obj: StudentRequest):
+        request_obj.status = "pending"
+        request_obj.save()
+
+    def _handle_enrollment(self, request_obj: StudentRequest):
+        student = request_obj.student
+        section = request_obj.section
+        error = self._validate_enrollment(student, section)
+        if error:
+            return error
+        Enrollment.objects.update_or_create(
+            student=student,
+            section=section,
+            defaults={"status": "enrolling"},
+        )
+        request_obj.status = "approved"
+        request_obj.save()
+        return None
+
+    def _handle_drop(self, request_obj: StudentRequest):
+        try:
+            enrollment = Enrollment.objects.get(student=request_obj.student, section=request_obj.section)
+        except Enrollment.DoesNotExist:
+            return "尚未选该课程，无法退课。"
+        enrollment.status = "dropped"
+        enrollment.save(update_fields=["status"])
+        request_obj.status = "approved"
+        request_obj.save()
+        return None
+
+    def _calculate_gpa(self, enrollments):
+        grade_points = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
+        total_points = 0
+        total_credits = 0
+        for enroll in enrollments:
+            if enroll.final_grade:
+                pts = grade_points.get(enroll.final_grade)
+                if pts is None:
+                    continue
+                total_points += float(enroll.section.course.credits) * pts
+                total_credits += float(enroll.section.course.credits)
+        if total_credits == 0:
+            return None
+        return round(total_points / total_credits, 2)
+
 
 class StudentEnrollmentView(LoginRequiredMixin, EnrollmentValidationMixin, TemplateView):
     template_name = "registration/course_selection.html"
@@ -321,105 +374,6 @@ class StudentEnrollmentView(LoginRequiredMixin, EnrollmentValidationMixin, Templ
             messages.error(request, "未知操作。")
         return redirect("student_enrollment")
 
-    def _get_handler(self, request_type):
-        handlers = {
-            "retake": self._handle_pending,
-            "cross_college": self._handle_pending,
-            "credit_overload": self._handle_pending,
-        }
-        return handlers.get(request_type)
-
-    def _handle_pending(self, request_obj: StudentRequest):
-        request_obj.status = "pending"
-        request_obj.save()
-
-    def _handle_enrollment(self, request_obj: StudentRequest):
-        student = request_obj.student
-        section = request_obj.section
-        error = self._validate_enrollment(student, section)
-        if error:
-            return error
-        Enrollment.objects.update_or_create(
-            student=student,
-            section=section,
-            defaults={"status": "enrolling"},
-        )
-        request_obj.status = "approved"
-        request_obj.save()
-        return None
-
-    def _handle_drop(self, request_obj: StudentRequest):
-        try:
-            enrollment = Enrollment.objects.get(student=request_obj.student, section=request_obj.section)
-        except Enrollment.DoesNotExist:
-            return "尚未选该课程，无法退课。"
-        enrollment.status = "dropped"
-        enrollment.save(update_fields=["status"])
-        request_obj.status = "approved"
-        request_obj.save()
-        return None
-
-    def _validate_enrollment(self, student, section):
-        active_enrollments = Enrollment.objects.filter(
-            student=student,
-            status="enrolling",
-        ).select_related("section__course")
-
-        # credit load check
-        planned_credits = sum(e.section.course.credits for e in active_enrollments) + section.course.credits
-        if planned_credits > 40:
-            return "选课后总学分不得超过 40 学分。"
-
-        # capacity check
-        current_count = Enrollment.objects.filter(section=section, status="enrolling").count()
-        if current_count >= section.capacity:
-            return "该教学班已满员，暂无法继续选课。"
-
-        # time conflict check
-        new_slots = MeetingTime.objects.filter(section=section)
-        for slot in new_slots:
-            conflict = MeetingTime.objects.filter(
-                section__in=[e.section for e in active_enrollments],
-                day_of_week=slot.day_of_week,
-                start_time__lt=slot.end_time,
-                end_time__gt=slot.start_time,
-            )
-            if conflict.exists():
-                return "与已选课程存在时间冲突。"
-
-        # prerequisite check
-        missing = []
-        grade_order = {"A": 4, "B": 3, "C": 2, "D": 1, "P": 2, "F": 0, "NP": 0}
-        prereqs = CoursePrerequisite.objects.filter(course=section.course)
-        for prereq in prereqs:
-            record = Enrollment.objects.filter(
-                student=student,
-                section__course=prereq.prerequisite,
-                final_grade__isnull=False,
-            ).first()
-            if not record:
-                missing.append(prereq.prerequisite.code)
-                continue
-            if grade_order.get(record.final_grade, 0) < grade_order.get(prereq.min_grade, 0):
-                missing.append(prereq.prerequisite.code)
-        if missing:
-            return "未满足先修要求：" + ", ".join(missing)
-        return None
-
-    def _calculate_gpa(self, enrollments):
-        grade_points = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
-        total_points = 0
-        total_credits = 0
-        for enroll in enrollments:
-            if enroll.final_grade:
-                pts = grade_points.get(enroll.final_grade)
-                if pts is None:
-                    continue
-                total_points += float(enroll.section.course.credits) * pts
-                total_credits += float(enroll.section.course.credits)
-        if total_credits == 0:
-            return None
-        return round(total_points / total_credits, 2)
 
 
 class StudentScheduleExportView(LoginRequiredMixin, View):
@@ -455,6 +409,50 @@ class StudentScheduleExportView(LoginRequiredMixin, View):
 
         response = HttpResponse(content_type="text/csv")
         filename = f"schedule_{request.user.username}_grid.csv"
+        response["Content-Disposition"] = f"attachment; filename={filename}"
+
+        writer = csv.writer(response)
+        writer.writerow(["时间段"] + [day_labels[d] for d in days])
+        for slot_range in ordered_slots:
+            row = [f"{slot_range[0]}-{slot_range[1]}"]
+            for day in days:
+                cell = "\n---\n".join(slot_matrix[slot_range].get(day, []))
+                row.append(cell)
+            writer.writerow(row)
+
+        return response
+
+
+class InstructorScheduleExportView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        if not hasattr(request.user, "instructor_profile"):
+            return HttpResponseForbidden("仅教师可导出课表")
+
+        sections = CourseSection.objects.filter(instructor=request.user.instructor_profile).values_list(
+            "id", flat=True
+        )
+        meeting_times = MeetingTime.objects.filter(section_id__in=sections).select_related(
+            "section__course", "section__semester", "section__instructor__user"
+        )
+
+        days = [choice[0] for choice in MeetingTime.DAY_OF_WEEK_CHOICES]
+        day_labels = {choice[0]: choice[1] for choice in MeetingTime.DAY_OF_WEEK_CHOICES}
+        slot_matrix = defaultdict(lambda: defaultdict(list))
+
+        for slot in meeting_times:
+            key = (slot.start_time, slot.end_time)
+            course_label = (
+                f"{slot.section.course.name}\n"
+                f"{slot.section.course.code}-S{slot.section.section_number}\n"
+                f"{slot.section.semester.code}"
+            )
+            location = slot.location or "待定"
+            slot_matrix[key][slot.day_of_week].append(f"{course_label}\n@{location}")
+
+        ordered_slots = sorted(slot_matrix.keys(), key=lambda t: t[0])
+
+        response = HttpResponse(content_type="text/csv")
+        filename = f"schedule_{request.user.username}_instructor_grid.csv"
         response["Content-Disposition"] = f"attachment; filename={filename}"
 
         writer = csv.writer(response)
@@ -528,6 +526,45 @@ class InstructorDashboardView(LoginRequiredMixin, TemplateView):
             "enrollment_count": len(enrollments),
         }
         context["profile"] = instructor
+        return context
+
+
+class InstructorSectionDetailView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/instructor_section_detail.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not hasattr(request.user, "instructor_profile"):
+            return HttpResponseForbidden("仅教师可访问此页面")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        self.section = self.get_section()
+        if not self.section:
+            return HttpResponseForbidden("未找到教学班或无权限")
+        return super().get(request, *args, **kwargs)
+
+    def get_section(self):
+        try:
+            return (
+                CourseSection.objects.select_related("course", "semester", "instructor__user")
+                .prefetch_related("meeting_times")
+                .get(pk=self.kwargs["section_id"], instructor=self.request.user.instructor_profile)
+            )
+        except CourseSection.DoesNotExist:
+            return None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        section = getattr(self, "section", None) or self.get_section()
+
+        enrollments = Enrollment.objects.filter(section=section).select_related("student__user").order_by(
+            "student__user__username"
+        )
+
+        context["section"] = section
+        context["enrollments"] = enrollments
+        context["grade_choices"] = Enrollment.GRADE_CHOICES
+        context["status_choices"] = Enrollment.STATUS_CHOICES
         return context
 
 
@@ -658,7 +695,7 @@ class InstructorGradeUpdateView(LoginRequiredMixin, View):
 
         if section.grades_locked:
             messages.error(request, "该教学班成绩已锁定，无法修改。")
-            return redirect("instructor_home")
+            return redirect("instructor_section_detail", section_id=section.id)
 
         enrollment_id = request.POST.get("enrollment_id")
         grade = request.POST.get("final_grade")
@@ -666,20 +703,20 @@ class InstructorGradeUpdateView(LoginRequiredMixin, View):
 
         if grade and grade not in dict(Enrollment.GRADE_CHOICES):
             messages.error(request, "成绩格式不正确。")
-            return redirect("instructor_home")
+            return redirect("instructor_section_detail", section_id=section.id)
 
         try:
             enrollment = Enrollment.objects.get(pk=enrollment_id, section=section)
         except Enrollment.DoesNotExist:
             messages.error(request, "未找到选课记录。")
-            return redirect("instructor_home")
+            return redirect("instructor_section_detail", section_id=section.id)
 
         enrollment.final_grade = grade
         enrollment.status = status
         enrollment.grade_points = self._grade_to_points(grade)
         enrollment.save(update_fields=["final_grade", "status", "grade_points"])
         messages.success(request, "已更新成绩记录。")
-        return redirect("instructor_home")
+        return redirect("instructor_section_detail", section_id=section.id)
 
     def _grade_to_points(self, grade: str | None):
         mapping = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}

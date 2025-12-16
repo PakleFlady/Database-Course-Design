@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}教学班详情{% endblock %}
+{% block content %}
+<h1>教学班详情</h1>
+<p>在此页面查看选课名单、课表安排，并录入或更新成绩。保存成绩后会返回本页，方便连续操作。</p>
+
+<div class="section">
+  <h2>基础信息</h2>
+  <ul>
+    <li><strong>课程：</strong>{{ section.course.code }} {{ section.course.name }}</li>
+    <li><strong>学期：</strong>{{ section.semester.name }}</li>
+    <li><strong>班号：</strong>{{ section.section_number }}</li>
+    <li><strong>容量：</strong>{{ section.capacity }}</li>
+    <li><strong>成绩状态：</strong>{% if section.grades_locked %}<span class="badge">成绩已锁定</span>{% else %}<span class="badge">可录入</span>{% endif %}</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>上课时间安排</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>星期</th>
+        <th>时间</th>
+        <th>地点</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for slot in section.meeting_times.all %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ slot.get_day_of_week_display }}</td>
+        <td>{{ slot.start_time }} - {{ slot.end_time }}</td>
+        <td>{{ slot.location|default:"待定" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3">暂无课程时间。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>选课名单与成绩录入</h2>
+  <div class="hint">
+    <ul>
+      <li>若成绩已锁定，请联系管理员解锁后再尝试更新。</li>
+      <li>保存后系统会自动计算绩点并更新状态。</li>
+    </ul>
+  </div>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>学生</th>
+        <th>状态</th>
+        <th>成绩</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for enrollment in enrollments %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ enrollment.student.user.get_full_name|default:enrollment.student.user.username }}</td>
+        <td>{{ enrollment.get_status_display }}</td>
+        <td>{{ enrollment.final_grade|default:"-" }}</td>
+        <td>
+          <form method="post" action="{% url 'grade_update' section.id %}" style="display:flex; gap:4px; align-items:center;">
+            {% csrf_token %}
+            <input type="hidden" name="enrollment_id" value="{{ enrollment.id }}" />
+            <label class="sr-only" for="grade-{{ enrollment.id }}">成绩</label>
+            <select name="final_grade" id="grade-{{ enrollment.id }}">
+              <option value="">--</option>
+              {% for code, label in grade_choices %}
+              <option value="{{ code }}" {% if enrollment.final_grade == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <label class="sr-only" for="status-{{ enrollment.id }}">状态</label>
+            <select name="status" id="status-{{ enrollment.id }}">
+              {% for code, label in status_choices %}
+              <option value="{{ code }}" {% if enrollment.status == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <button class="button secondary" type="submit" {% if section.grades_locked %}disabled{% endif %}>保存</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">暂无选课记录。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="actions">
+  <a class="button secondary" href="{% url 'instructor_home' %}">返回工作台</a>
+  <a class="button secondary" href="{% url 'instructor_schedule_export' %}">导出课表</a>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}

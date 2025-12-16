@@ -59,6 +59,9 @@
 
 <div class="section">
   <h2>上课时间安排</h2>
+  <div class="actions" style="margin-bottom:8px;">
+    <a class="button secondary" href="{% url 'instructor_schedule_export' %}">导出课表</a>
+  </div>
   <table>
     <thead>
       <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
@@ -115,47 +118,26 @@
 
 <div class="section">
   <h2>选课名单/成绩录入</h2>
+  <p>成绩录入和选课详情已迁移至独立页面，请在下方选择教学班后进入。</p>
   <table>
     <thead>
       <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
-        <th>学生</th>
         <th>课程</th>
         <th>学期</th>
-        <th>状态</th>
-        <th>成绩</th>
+        <th>班号</th>
         <th>操作</th>
       </tr>
     </thead>
     <tbody>
-      {% for enrollment in enrollments %}
+      {% for section in sections %}
       <tr style="border-bottom:1px solid #f1f5f9;">
-        <td>{{ enrollment.student.user.get_full_name|default:enrollment.student.user.username }}</td>
-        <td>{{ enrollment.section.course.name }}</td>
-        <td>{{ enrollment.section.semester.code }}</td>
-        <td>{{ enrollment.get_status_display }}</td>
-        <td>{{ enrollment.final_grade|default:"-" }}</td>
-        <td>
-          <form method="post" action="{% url 'grade_update' enrollment.section_id %}" style="display:flex; gap:4px; align-items:center;">
-            {% csrf_token %}
-            <input type="hidden" name="enrollment_id" value="{{ enrollment.id }}" />
-            <label class="sr-only" for="grade-{{ enrollment.id }}">成绩</label>
-            <select name="final_grade" id="grade-{{ enrollment.id }}">
-              <option value="">--</option>
-              {% for code,label in enrollment.GRADE_CHOICES %}
-              <option value="{{ code }}" {% if enrollment.final_grade == code %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
-            <select name="status">
-              {% for code,label in enrollment.STATUS_CHOICES %}
-              <option value="{{ code }}" {% if enrollment.status == code %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
-            <button class="button secondary" type="submit" {% if enrollment.section.grades_locked %}disabled{% endif %}>保存</button>
-          </form>
-        </td>
+        <td>{{ section.course.name }}</td>
+        <td>{{ section.semester.code }}</td>
+        <td>{{ section.section_number }}</td>
+        <td><a class="button secondary" href="{% url 'instructor_section_detail' section.id %}">查看详情</a></td>
       </tr>
       {% empty %}
-      <tr><td colspan="6">暂无选课记录</td></tr>
+      <tr><td colspan="4">暂无选课记录</td></tr>
       {% endfor %}
     </tbody>
   </table>

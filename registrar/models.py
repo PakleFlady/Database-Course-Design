@@ -26,6 +26,7 @@ class UserSecurity(models.Model):
 
 class Department(models.Model):
     code = models.CharField("院系代码", max_length=20, unique=True)
+    numeric_code = models.PositiveIntegerField("院系编号", unique=True, default=0)
     name = models.CharField("院系名称", max_length=255)
 
     class Meta:
@@ -146,11 +147,12 @@ class StudentProfile(models.Model):
         return f"{self.user.get_full_name() or self.user.username} - {self.major}"
 
     @classmethod
-    def generate_student_number(cls, department_code: str) -> str:
-        """Generate a student number in the format <year><department_code><seq>."""
+    def generate_student_number(cls, department: Department) -> str:
+        """Generate a student number in the format <year><department_numeric_code><seq>."""
 
         year_prefix = datetime.date.today().year
-        base_prefix = f"{year_prefix}{department_code}"
+        dept_segment = f"{department.numeric_code:02d}" if department.numeric_code is not None else department.code
+        base_prefix = f"{year_prefix}{dept_segment}"
         last_number = (
             cls.objects.filter(student_number__startswith=base_prefix)
             .order_by("-student_number")
@@ -165,7 +167,7 @@ class StudentProfile(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.student_number and self.department:
-            self.student_number = self.generate_student_number(self.department.code)
+            self.student_number = self.generate_student_number(self.department)
         super().save(*args, **kwargs)
 
 
