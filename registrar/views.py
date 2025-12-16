@@ -1,6 +1,7 @@
 """Views for authentication helpers and self-service portals."""
 from __future__ import annotations
 
+from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import (
     LoginView,
@@ -22,6 +23,7 @@ from .models import CourseSection, StudentRequest, UserSecurity
 class ForcePasswordChangeView(LoginRequiredMixin, PasswordChangeView):
     template_name = "registration/force_password_change_form.html"
     success_url = reverse_lazy("password_change_done")
+    form_class = SetPasswordForm
 
     def form_valid(self, form):
         response = super().form_valid(form)
