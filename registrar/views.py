@@ -5,6 +5,7 @@ import csv
 from collections import defaultdict
 
 from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import (
@@ -33,6 +34,7 @@ from .models import (
     CourseSection,
     Enrollment,
     MeetingTime,
+    StudentProfile,
     StudentRequest,
     UserSecurity,
 )
@@ -72,6 +74,13 @@ class StudentLoginView(LoginView):
     extra_context = {"role_label": "学生", "switch_url_name": "instructor_login"}
     authentication_form = StudentAuthenticationForm
 
+    def dispatch(self, request, *args, **kwargs):
+        # 始终在进入登录页时清除已有会话，避免自动跳回原账户
+        if request.user.is_authenticated:
+            logout(request)
+            return redirect(request.path)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_success_url(self):
         redirect_to = self.get_redirect_url()
         return redirect_to or reverse_lazy("account_home")
@@ -82,6 +91,12 @@ class InstructorLoginView(LoginView):
     redirect_authenticated_user = True
     extra_context = {"role_label": "教师", "switch_url_name": "student_login"}
     authentication_form = InstructorAuthenticationForm
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            logout(request)
+            return redirect(request.path)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
         redirect_to = self.get_redirect_url()
@@ -301,25 +316,35 @@ class StudentScheduleExportView(LoginRequiredMixin, View):
             "section__course", "section__semester", "section__instructor__user"
         )
 
+        # 生成按时间段（行）与星期（列）的表格课表
+        days = [choice[0] for choice in MeetingTime.DAY_OF_WEEK_CHOICES]
+        day_labels = {choice[0]: choice[1] for choice in MeetingTime.DAY_OF_WEEK_CHOICES}
+        slot_matrix = defaultdict(lambda: defaultdict(list))
+
+        for slot in meeting_times:
+            key = (slot.start_time, slot.end_time)
+            course_label = (
+                f"{slot.section.course.name}\n"
+                f"{slot.section.course.code}-S{slot.section.section_number}\n"
+                f"{slot.section.instructor.user.get_full_name() or slot.section.instructor.user.username}"
+            )
+            location = slot.location or "待定"
+            slot_matrix[key][slot.day_of_week].append(f"{course_label}\n@{location}")
+
+        ordered_slots = sorted(slot_matrix.keys(), key=lambda t: t[0])
+
         response = HttpResponse(content_type="text/csv")
-        filename = f"schedule_{request.user.username}.csv"
+        filename = f"schedule_{request.user.username}_grid.csv"
         response["Content-Disposition"] = f"attachment; filename={filename}"
 
         writer = csv.writer(response)
-        writer.writerow(["星期", "时间", "课程", "教学班", "教师", "学期", "地点"])
-        for slot in meeting_times:
-            writer.writerow(
-                [
-                    slot.get_day_of_week_display(),
-                    f"{slot.start_time}-{slot.end_time}",
-                    slot.section.course.name,
-                    f"{slot.section.course.code}-S{slot.section.section_number}",
-                    slot.section.instructor.user.get_full_name()
-                    or slot.section.instructor.user.username,
-                    slot.section.semester.code,
-                    slot.location,
-                ]
-            )
+        writer.writerow(["时间段"] + [day_labels[d] for d in days])
+        for slot_range in ordered_slots:
+            row = [f"{slot_range[0]}-{slot_range[1]}"]
+            for day in days:
+                cell = "\n---\n".join(slot_matrix[slot_range].get(day, []))
+                row.append(cell)
+            writer.writerow(row)
 
         return response
 
