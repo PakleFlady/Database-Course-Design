@@ -187,3 +187,27 @@ class AdminBulkEnrollmentForm(forms.Form):
         if not department and not class_group and not major:
             raise forms.ValidationError("请至少填写学院或班级条件。")
         return cleaned
+
+
+class AdminClassScheduleForm(forms.Form):
+    class_group = forms.ModelChoiceField(
+        label="班级", queryset=ClassGroup.objects.select_related("department")
+    )
+    sections = forms.ModelMultipleChoiceField(
+        label="批量同步到班级的教学班",
+        queryset=CourseSection.objects.select_related("course", "semester", "instructor__user"),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        class_group = cleaned.get("class_group")
+        sections = cleaned.get("sections") or []
+        if class_group and sections:
+            cross_department = [
+                section
+                for section in sections
+                if section.course.department != class_group.department
+            ]
+            if cross_department:
+                raise forms.ValidationError("仅允许将本学院的教学班同步到所选班级。")
+        return cleaned

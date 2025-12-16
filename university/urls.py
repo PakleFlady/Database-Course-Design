@@ -5,6 +5,7 @@ from django.urls import path
 from registrar.views import (
     AccountHomeView,
     AdminBulkEnrollmentView,
+    AdminClassScheduleView,
     ForcePasswordChangeDoneView,
     ForcePasswordChangeView,
     InstructorLoginView,
@@ -15,7 +16,12 @@ from registrar.views import (
     ApprovalQueueView,
     StudentLoginView,
     StudentDashboardView,
+    StudentGradesView,
     StudentScheduleExportView,
+    StudentProfileView,
+    StudentRequestLogView,
+    StudentScheduleView,
+    StudentSelfServiceView,
     InstructorDashboardView,
     InstructorRosterView,
     InstructorScheduleExportView,
@@ -36,10 +42,27 @@ urlpatterns = [
     path("accounts/logout/", UserLogoutView.as_view(), name="logout"),
     path("accounts/home/", AccountHomeView.as_view(), name="account_home"),
     path("accounts/home/student/", StudentDashboardView.as_view(), name="student_home"),
+    path("accounts/home/student/profile/", StudentProfileView.as_view(), name="student_profile"),
+    path("accounts/home/student/self-service/", StudentSelfServiceView.as_view(), name="student_self_service"),
     path(
         "accounts/home/student/enrollment/",
         StudentEnrollmentView.as_view(),
         name="student_enrollment",
+    ),
+    path(
+        "accounts/home/student/schedule/overview/",
+        StudentScheduleView.as_view(),
+        name="student_schedule_overview",
+    ),
+    path(
+        "accounts/home/student/grades/",
+        StudentGradesView.as_view(),
+        name="student_grades",
+    ),
+    path(
+        "accounts/home/student/requests/",
+        StudentRequestLogView.as_view(),
+        name="student_requests",
     ),
     path(
         "accounts/home/student/schedule/export/",
@@ -64,6 +87,11 @@ urlpatterns = [
     ),
     path("accounts/home/admin/", AdminDashboardView.as_view(), name="admin_home"),
     path("accounts/home/admin/bulk-enroll/", AdminBulkEnrollmentView.as_view(), name="admin_bulk_enroll"),
+    path(
+        "accounts/home/admin/class-schedule/",
+        AdminClassScheduleView.as_view(),
+        name="admin_class_schedule",
+    ),
     path(
         "accounts/home/admin/sections/<int:section_id>/lock/",
         AdminSectionLockToggleView.as_view(),

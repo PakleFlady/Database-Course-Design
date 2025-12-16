@@ -25,6 +25,7 @@ from django.views.generic import TemplateView
 
 from .forms import (
     AdminBulkEnrollmentForm,
+    AdminClassScheduleForm,
     ApprovalDecisionForm,
     InstructorAuthenticationForm,
     SelfServiceRequestForm,
@@ -189,13 +190,113 @@ class EnrollmentValidationMixin:
         return round(total_points / total_credits, 2)
 
 
-class StudentDashboardView(LoginRequiredMixin, EnrollmentValidationMixin, TemplateView):
-    template_name = "registration/dashboard_student.html"
-
+class StudentPortalMixin(LoginRequiredMixin, EnrollmentValidationMixin):
     def dispatch(self, request, *args, **kwargs):
         if not hasattr(request.user, "student_profile"):
             return HttpResponseForbidden("仅学生可访问此页面")
         return super().dispatch(request, *args, **kwargs)
+
+    def _build_student_context(self):
+        profile = self.request.user.student_profile
+        request_qs = StudentRequest.objects.filter(student=profile).select_related(
+            "section__course", "section__semester"
+        )
+        enrollments = list(
+            Enrollment.objects.filter(student=profile)
+            .select_related("section__course", "section__semester")
+            .order_by("section__semester__start_date")
+        )
+        active_sections = [
+            enrollment.section
+            for enrollment in enrollments
+            if enrollment.status in ["enrolling", "passed", "failed"]
+        ]
+
+        return {
+            "profile": profile,
+            "requests": request_qs.prefetch_related("logs"),
+            "request_summary": {
+                "pending": request_qs.filter(status="pending").count(),
+                "approved": request_qs.filter(status="approved").count(),
+                "rejected": request_qs.filter(status="rejected").count(),
+            },
+            "enrollments": enrollments,
+            "available_section_count": CourseSection.objects.filter(course__department=profile.department).count(),
+            "gpa": self._calculate_gpa(enrollments),
+            "credit_load": sum(
+                enrollment.section.course.credits
+                for enrollment in enrollments
+                if enrollment.status == "enrolling"
+            ),
+            "schedule": MeetingTime.objects.filter(section__in=active_sections).select_related(
+                "section__course", "section__semester"
+            ),
+            "failed_enrollments": [
+                enrollment
+                for enrollment in enrollments
+                if enrollment.status == "failed" or enrollment.final_grade in ["F", "NP"]
+            ],
+        }
+
+    def _get_handler(self, request_type):
+        handlers = {
+            "retake": self._handle_pending,
+            "cross_college": self._handle_pending,
+            "credit_overload": self._handle_pending,
+        }
+        return handlers.get(request_type)
+
+    def _handle_pending(self, request_obj: StudentRequest):
+        request_obj.status = "pending"
+        request_obj.save()
+
+    def _handle_enrollment(self, request_obj: StudentRequest):
+        student = request_obj.student
+        section = request_obj.section
+        error = self._validate_enrollment(student, section)
+        if error:
+            return error
+        Enrollment.objects.update_or_create(
+            student=student,
+            section=section,
+            defaults={"status": "enrolling"},
+        )
+        request_obj.status = "approved"
+        request_obj.save()
+        return None
+
+    def _handle_drop(self, request_obj: StudentRequest):
+        try:
+            enrollment = Enrollment.objects.get(student=request_obj.student, section=request_obj.section)
+        except Enrollment.DoesNotExist:
+            return "尚未选该课程，无法退课。"
+        enrollment.status = "dropped"
+        enrollment.save(update_fields=["status"])
+        request_obj.status = "approved"
+        request_obj.save()
+        return None
+
+
+class StudentDashboardView(StudentPortalMixin, TemplateView):
+    template_name = "registration/dashboard_student.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self._build_student_context())
+        return context
+
+
+class StudentProfileView(StudentPortalMixin, TemplateView):
+    template_name = "registration/student_profile.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self._build_student_context())
+        return context
+
+
+class StudentSelfServiceView(StudentPortalMixin, TemplateView):
+    template_name = "registration/student_selfservice.html"
 
     def get_form(self):
         return SelfServiceRequestForm(student=self.request.user.student_profile)
@@ -216,55 +317,43 @@ class StudentDashboardView(LoginRequiredMixin, EnrollmentValidationMixin, Templa
         else:
             request_obj.save()
         messages.success(request, "请求已提交，请留意状态变更。")
-        return redirect("student_home")
+        return redirect("student_self_service")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        profile = self.request.user.student_profile
-        request_qs = StudentRequest.objects.filter(student=profile).select_related(
-            "section__course", "section__semester"
-        )
-        enrollments = list(
-            Enrollment.objects.filter(student=profile)
-            .select_related("section__course", "section__semester")
-            .order_by("section__semester__start_date")
-        )
-        active_sections = [
-            enrollment.section
-            for enrollment in enrollments
-            if enrollment.status in ["enrolling", "passed", "failed"]
-        ]
-
+        context.update(self._build_student_context())
         context["form"] = kwargs.get("form") or self.get_form()
-        context["requests"] = request_qs.prefetch_related("logs")
-        context["request_summary"] = {
-            "pending": request_qs.filter(status="pending").count(),
-            "approved": request_qs.filter(status="approved").count(),
-            "rejected": request_qs.filter(status="rejected").count(),
-        }
-        context["enrollments"] = enrollments
-        context["available_section_count"] = CourseSection.objects.filter(
-            course__department=profile.department
-        ).count()
-        context["gpa"] = self._calculate_gpa(enrollments)
-        context["credit_load"] = sum(
-            enrollment.section.course.credits
-            for enrollment in enrollments
-            if enrollment.status == "enrolling"
-        )
-        context["schedule"] = MeetingTime.objects.filter(section__in=active_sections).select_related(
-            "section__course", "section__semester"
-        )
-        context["failed_enrollments"] = [
-            enrollment
-            for enrollment in enrollments
-            if enrollment.status == "failed" or enrollment.final_grade in ["F", "NP"]
-        ]
-        context["profile"] = profile
         return context
 
 
-class StudentEnrollmentView(LoginRequiredMixin, EnrollmentValidationMixin, TemplateView):
+class StudentScheduleView(StudentPortalMixin, TemplateView):
+    template_name = "registration/student_schedule.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self._build_student_context())
+        return context
+
+
+class StudentGradesView(StudentPortalMixin, TemplateView):
+    template_name = "registration/student_grades.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self._build_student_context())
+        return context
+
+
+class StudentRequestLogView(StudentPortalMixin, TemplateView):
+    template_name = "registration/student_requests.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self._build_student_context())
+        return context
+
+
+class StudentEnrollmentView(StudentPortalMixin, TemplateView):
     template_name = "registration/course_selection.html"
 
     def dispatch(self, request, *args, **kwargs):
@@ -338,91 +427,6 @@ class StudentEnrollmentView(LoginRequiredMixin, EnrollmentValidationMixin, Templ
         else:
             messages.error(request, "未知操作。")
         return redirect("student_enrollment")
-
-    def _get_handler(self, request_type):
-        handlers = {
-            "retake": self._handle_pending,
-            "cross_college": self._handle_pending,
-            "credit_overload": self._handle_pending,
-        }
-        return handlers.get(request_type)
-
-    def _handle_pending(self, request_obj: StudentRequest):
-        request_obj.status = "pending"
-        request_obj.save()
-
-    def _handle_enrollment(self, request_obj: StudentRequest):
-        student = request_obj.student
-        section = request_obj.section
-        error = self._validate_enrollment(student, section)
-        if error:
-            return error
-        Enrollment.objects.update_or_create(
-            student=student,
-            section=section,
-            defaults={"status": "enrolling"},
-        )
-        request_obj.status = "approved"
-        request_obj.save()
-        return None
-
-    def _handle_drop(self, request_obj: StudentRequest):
-        try:
-            enrollment = Enrollment.objects.get(student=request_obj.student, section=request_obj.section)
-        except Enrollment.DoesNotExist:
-            return "尚未选该课程，无法退课。"
-        enrollment.status = "dropped"
-        enrollment.save(update_fields=["status"])
-        request_obj.status = "approved"
-        request_obj.save()
-        return None
-
-    def _validate_enrollment(self, student, section):
-        active_enrollments = Enrollment.objects.filter(
-            student=student,
-            status="enrolling",
-        ).select_related("section__course")
-
-        # credit load check
-        planned_credits = sum(e.section.course.credits for e in active_enrollments) + section.course.credits
-        if planned_credits > 40:
-            return "选课后总学分不得超过 40 学分。"
-
-        # capacity check
-        current_count = Enrollment.objects.filter(section=section, status="enrolling").count()
-        if current_count >= section.capacity:
-            return "该教学班已满员，暂无法继续选课。"
-
-        # time conflict check
-        new_slots = MeetingTime.objects.filter(section=section)
-        for slot in new_slots:
-            conflict = MeetingTime.objects.filter(
-                section__in=[e.section for e in active_enrollments],
-                day_of_week=slot.day_of_week,
-                start_time__lt=slot.end_time,
-                end_time__gt=slot.start_time,
-            )
-            if conflict.exists():
-                return "与已选课程存在时间冲突。"
-
-        # prerequisite check
-        missing = []
-        grade_order = {"A": 4, "B": 3, "C": 2, "D": 1, "P": 2, "F": 0, "NP": 0}
-        prereqs = CoursePrerequisite.objects.filter(course=section.course)
-        for prereq in prereqs:
-            record = Enrollment.objects.filter(
-                student=student,
-                section__course=prereq.prerequisite,
-                final_grade__isnull=False,
-            ).first()
-            if not record:
-                missing.append(prereq.prerequisite.code)
-                continue
-            if grade_order.get(record.final_grade, 0) < grade_order.get(prereq.min_grade, 0):
-                missing.append(prereq.prerequisite.code)
-        if missing:
-            return "未满足先修要求：" + ", ".join(missing)
-        return None
 
 class StudentScheduleExportView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
@@ -634,6 +638,7 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
             "course", "semester", "instructor__user"
         ).order_by("semester__start_date")
         context["bulk_form"] = kwargs.get("bulk_form") or AdminBulkEnrollmentForm()
+        context["class_schedule_form"] = kwargs.get("class_schedule_form") or AdminClassScheduleForm()
         return context
 
 
@@ -675,6 +680,42 @@ class AdminBulkEnrollmentView(LoginRequiredMixin, View):
             )
         else:
             messages.info(request, "筛选范围内的学生已存在对应选课记录。")
+        return redirect("admin_home")
+
+
+class AdminClassScheduleView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            return HttpResponseForbidden("仅管理员可批量分配课程")
+
+        form = AdminClassScheduleForm(request.POST)
+        if not form.is_valid():
+            return AdminDashboardView.as_view()(request, class_schedule_form=form)
+
+        class_group = form.cleaned_data["class_group"]
+        sections = form.cleaned_data["sections"]
+        students = StudentProfile.objects.filter(class_group=class_group)
+
+        created = 0
+        for student in students:
+            for section in sections:
+                _, created_flag = Enrollment.objects.update_or_create(
+                    student=student,
+                    section=section,
+                    defaults={"status": "enrolling"},
+                )
+                created += int(created_flag)
+
+        if created:
+            section_labels = ", ".join(
+                f"{section.course.name}（{section.semester.code}）" for section in sections
+            )
+            messages.success(
+                request,
+                f"已为 {students.count()} 名学生同步班级课表：{section_labels}。新增 {created} 条选课记录。",
+            )
+        else:
+            messages.info(request, "所选班级的学生均已存在对应选课记录。")
         return redirect("admin_home")
 
 

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}个人档案{% endblock %}
+{% block content %}
+<h1>个人档案</h1>
+<p>查看个人基础信息与联系方式，后续修改请联系管理员。</p>
+
+<div class="hint">
+  <strong>{{ profile.user.get_full_name|default:profile.user.username }}</strong> · {{ profile.get_gender_display|default:"未填写" }}<br />
+  <span class="muted">学院/专业：{{ profile.department.name|default:"-" }} / {{ profile.major|default:"-" }}</span><br />
+  <span class="muted">班级：{{ profile.class_group|default:"未分配班级" }}</span><br />
+  <span class="muted">联系方式：{{ profile.contact_email|default:"未写邮箱" }}{% if profile.contact_phone %} / {{ profile.contact_phone }}{% endif %}</span>
+</div>
+
+<div class="actions" style="flex-wrap: wrap; gap: 10px; margin-top:14px;">
+  <a class="button secondary" href="{% url 'student_home' %}">返回学生首页</a>
+  <a class="button primary" href="{% url 'student_enrollment' %}">前往选课中心</a>
+</div>
+{% endblock %}

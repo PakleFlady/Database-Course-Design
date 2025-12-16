@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}课表与导出{% endblock %}
+{% block content %}
+<h1>上课时间安排</h1>
+<p>查看当前学期的详细排课，并可导出 CSV 课表。</p>
+
+<div style="display:flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom:8px; flex-wrap:wrap;">
+  <span class="muted">如需修改选课，请返回选课中心或提交审批。</span>
+  <a class="button secondary" href="{% url 'student_schedule_export' %}">导出课表</a>
+</div>
+
+<table>
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>星期</th>
+      <th>时间</th>
+      <th>课程</th>
+      <th>学期</th>
+      <th>地点</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for slot in schedule %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ slot.get_day_of_week_display }}</td>
+      <td>{{ slot.start_time }} - {{ slot.end_time }}</td>
+      <td>{{ slot.section.course.code }} {{ slot.section.course.name }}</td>
+      <td>{{ slot.section.semester.code }}</td>
+      <td>{{ slot.location|default:"待定" }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">暂未有课表安排</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="actions" style="flex-wrap: wrap; gap: 10px; margin-top:14px;">
+  <a class="button secondary" href="{% url 'student_home' %}">返回学生首页</a>
+  <a class="button primary" href="{% url 'student_enrollment' %}">进入选课中心</a>
+</div>
+{% endblock %}

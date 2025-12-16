@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}成绩与重修{% endblock %}
+{% block content %}
+<h1>成绩与重修</h1>
+<p>查看需重修的课程、已选课程成绩与绩点信息。</p>
+
+<h3 style="margin-top:0;">需关注/重修课程</h3>
+<table>
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>课程</th>
+      <th>学期</th>
+      <th>状态</th>
+      <th>成绩</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for enrollment in failed_enrollments %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ enrollment.section.course.name }}</td>
+      <td>{{ enrollment.section.semester.code }}</td>
+      <td>{{ enrollment.get_status_display }}</td>
+      <td>{{ enrollment.final_grade|default:"-" }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">暂无需重修的课程</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>已选课程与成绩</h3>
+<table>
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>课程</th>
+      <th>学期</th>
+      <th>状态</th>
+      <th>成绩</th>
+      <th>绩点</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for enrollment in enrollments %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ enrollment.section.course.name }}</td>
+      <td>{{ enrollment.section.semester.code }}</td>
+      <td>{{ enrollment.get_status_display }}</td>
+      <td>{{ enrollment.final_grade|default:"-" }}</td>
+      <td>{{ enrollment.grade_points|default:"-" }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">暂未有选课记录</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="actions" style="flex-wrap: wrap; gap: 10px; margin-top:14px;">
+  <a class="button secondary" href="{% url 'student_home' %}">返回学生首页</a>
+  <a class="button primary" href="{% url 'student_enrollment' %}">进入选课中心</a>
+</div>
+{% endblock %}
