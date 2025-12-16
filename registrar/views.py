@@ -171,6 +171,21 @@ class EnrollmentValidationMixin:
             return "未满足先修要求：" + ", ".join(missing)
         return None
 
+    def _calculate_gpa(self, enrollments):
+        grade_points = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
+        total_points = 0
+        total_credits = 0
+        for enroll in enrollments:
+            if enroll.final_grade:
+                pts = grade_points.get(enroll.final_grade)
+                if pts is None:
+                    continue
+                total_points += float(enroll.section.course.credits) * pts
+                total_credits += float(enroll.section.course.credits)
+        if total_credits == 0:
+            return None
+        return round(total_points / total_credits, 2)
+
 
 class StudentDashboardView(LoginRequiredMixin, EnrollmentValidationMixin, TemplateView):
     template_name = "registration/dashboard_student.html"
@@ -406,22 +421,6 @@ class StudentEnrollmentView(LoginRequiredMixin, EnrollmentValidationMixin, Templ
             return "未满足先修要求：" + ", ".join(missing)
         return None
 
-    def _calculate_gpa(self, enrollments):
-        grade_points = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
-        total_points = 0
-        total_credits = 0
-        for enroll in enrollments:
-            if enroll.final_grade:
-                pts = grade_points.get(enroll.final_grade)
-                if pts is None:
-                    continue
-                total_points += float(enroll.section.course.credits) * pts
-                total_credits += float(enroll.section.course.credits)
-        if total_credits == 0:
-            return None
-        return round(total_points / total_credits, 2)
-
-
 class StudentScheduleExportView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         if not hasattr(request.user, "student_profile"):
@@ -455,6 +454,51 @@ class StudentScheduleExportView(LoginRequiredMixin, View):
 
         response = HttpResponse(content_type="text/csv")
         filename = f"schedule_{request.user.username}_grid.csv"
+        response["Content-Disposition"] = f"attachment; filename={filename}"
+
+        writer = csv.writer(response)
+        writer.writerow(["时间段"] + [day_labels[d] for d in days])
+        for slot_range in ordered_slots:
+            row = [f"{slot_range[0]}-{slot_range[1]}"]
+            for day in days:
+                cell = "\n---\n".join(slot_matrix[slot_range].get(day, []))
+                row.append(cell)
+            writer.writerow(row)
+
+        return response
+
+
+class InstructorScheduleExportView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        if not hasattr(request.user, "instructor_profile"):
+            return HttpResponseForbidden("仅教师可导出课表")
+
+        sections = CourseSection.objects.filter(instructor=request.user.instructor_profile).values_list(
+            "id", flat=True
+        )
+
+        meeting_times = MeetingTime.objects.filter(section_id__in=sections).select_related(
+            "section__course", "section__semester", "section__instructor__user"
+        )
+
+        days = [choice[0] for choice in MeetingTime.DAY_OF_WEEK_CHOICES]
+        day_labels = {choice[0]: choice[1] for choice in MeetingTime.DAY_OF_WEEK_CHOICES}
+        slot_matrix = defaultdict(lambda: defaultdict(list))
+
+        for slot in meeting_times:
+            key = (slot.start_time, slot.end_time)
+            course_label = (
+                f"{slot.section.course.name}\n"
+                f"{slot.section.course.code}-S{slot.section.section_number}\n"
+                f"{slot.section.semester.code}"
+            )
+            location = slot.location or "待定"
+            slot_matrix[key][slot.day_of_week].append(f"{course_label}\n@{location}")
+
+        ordered_slots = sorted(slot_matrix.keys(), key=lambda t: t[0])
+
+        response = HttpResponse(content_type="text/csv")
+        filename = f"schedule_{request.user.username}_instructor.csv"
         response["Content-Disposition"] = f"attachment; filename={filename}"
 
         writer = csv.writer(response)
@@ -528,6 +572,45 @@ class InstructorDashboardView(LoginRequiredMixin, TemplateView):
             "enrollment_count": len(enrollments),
         }
         context["profile"] = instructor
+        return context
+
+
+class InstructorRosterView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/instructor_roster.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not hasattr(request.user, "instructor_profile"):
+            return HttpResponseForbidden("仅教师可访问此页面")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        instructor = self.request.user.instructor_profile
+        sections = (
+            CourseSection.objects.filter(instructor=instructor)
+            .select_related("course", "semester")
+            .prefetch_related("meeting_times")
+            .order_by("course__code", "section_number")
+        )
+        enrollments = (
+            Enrollment.objects.filter(section__in=sections)
+            .select_related("student__user", "section__course", "section__semester")
+            .order_by("section__course__code", "student__user__username")
+        )
+
+        roster_map: dict[int, list[Enrollment]] = defaultdict(list)
+        for enrollment in enrollments:
+            roster_map[enrollment.section_id].append(enrollment)
+
+        context["rosters"] = [
+            {"section": section, "enrollments": roster_map.get(section.id, [])}
+            for section in sections
+        ]
+        context["profile"] = instructor
+        context["stats"] = {
+            "section_count": sections.count(),
+            "enrollment_count": enrollments.count(),
+        }
         return context
 
 
