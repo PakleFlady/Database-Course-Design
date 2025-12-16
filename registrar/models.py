@@ -5,7 +5,7 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.db import models
-from django.db.models import F, Q
+from django.db.models import F, Q, Max
 
 User = get_user_model()
 
@@ -39,6 +39,18 @@ class Department(models.Model):
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         numeric = f"#{self.numeric_code}" if self.numeric_code is not None else "未编号"
         return f"{self.code} ({numeric}) - {self.name}"
+
+    def assign_numeric_code(self) -> int:
+        """Ensure the department has an auto-incrementing numeric code."""
+
+        if self.numeric_code is None:
+            current_max = Department.objects.aggregate(max_code=Max("numeric_code")).get("max_code") or 0
+            self.numeric_code = current_max + 1
+        return int(self.numeric_code)
+
+    def save(self, *args, **kwargs):
+        self.assign_numeric_code()
+        super().save(*args, **kwargs)
 
 
 class Semester(models.Model):
@@ -153,12 +165,13 @@ class StudentProfile(models.Model):
     def generate_student_number(cls, department: Department) -> str:
         """Generate a student number in the format <year><dept_numeric><seq>."""
 
+        if department.numeric_code is None:
+            department.assign_numeric_code()
+            if department.pk:
+                department.save(update_fields=["numeric_code"])
+
         year_prefix = datetime.date.today().year
-        dept_code = (
-            f"{int(department.numeric_code):02d}"
-            if department.numeric_code is not None
-            else department.code
-        )
+        dept_code = f"{int(department.numeric_code):03d}"
         base_prefix = f"{year_prefix}{dept_code}"
         last_number = (
             cls.objects.filter(student_number__startswith=base_prefix)

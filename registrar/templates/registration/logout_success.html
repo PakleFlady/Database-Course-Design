@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}退出成功{% endblock %}
+{% block content %}
+<h1>退出登录成功</h1>
+<p class="muted">你已安全退出当前账号，如需继续操作请重新登录。</p>
+<div class="actions" style="margin-top:16px; gap:10px;">
+  <a class="button primary" href="{% url 'login_portal' %}">返回登录入口</a>
+  <a class="button secondary" href="{% url 'student_login' %}">学生登录</a>
+  <a class="button secondary" href="{% url 'instructor_login' %}">教师登录</a>
+</div>
+{% endblock %}

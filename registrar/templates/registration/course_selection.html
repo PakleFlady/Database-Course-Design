@@ -57,7 +57,6 @@
     </thead>
     <tbody>
       {% for section in available_sections %}
-      {% with remaining=section.capacity|add:-section.enrolled_count %}
       <tr style="border-bottom:1px solid #f1f5f9;">
         <td>{{ section.course.code }} {{ section.course.name }}</td>
         <td>{{ section.instructor.user.get_full_name|default:section.instructor.user.username }}</td>
@@ -74,7 +73,7 @@
             {% endif %}
           {% endwith %}
         </td>
-        <td>{{ section.capacity }} / {{ remaining }}</td>
+        <td>{{ section.capacity }} / {{ section.remaining_capacity }}</td>
         <td>{{ section.semester.code }}</td>
         <td>
           {% if section.id in enrollment_ids %}
@@ -85,7 +84,7 @@
               <input type="hidden" name="section_id" value="{{ section.id }}" />
               <button type="submit" class="button danger small">退课</button>
             </form>
-          {% elif remaining <= 0 %}
+          {% elif section.remaining_capacity <= 0 %}
             <span class="muted">容量已满</span>
           {% else %}
             <form method="post" class="enrollment-action" data-confirm="确认选课？" style="margin:0;">
@@ -97,7 +96,6 @@
           {% endif %}
         </td>
       </tr>
-      {% endwith %}
       {% empty %}
       <tr><td colspan="6">暂无可选课程</td></tr>
       {% endfor %}

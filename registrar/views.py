@@ -14,7 +14,8 @@ from django.contrib.auth.views import (
     PasswordChangeDoneView,
     PasswordChangeView,
 )
-from django.db.models import Count, Q
+from django.db.models import Count, Q, F
+from django.db.models.functions import Greatest
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
@@ -119,12 +120,13 @@ class AccountHomeView(LoginRequiredMixin, TemplateView):
 
 
 class UserLogoutView(LogoutView):
-    """Always redirect to the login portal to avoid template lookups."""
+    """Show a friendly logout confirmation page instead of silent redirect."""
 
-    next_page = reverse_lazy("login_portal")
+    next_page = None
+    template_name = "registration/logout_success.html"
 
     def get_next_page(self):
-        return reverse_lazy("login_portal")
+        return None
 
 
 class EnrollmentValidationMixin:
@@ -285,6 +287,7 @@ class StudentEnrollmentView(LoginRequiredMixin, EnrollmentValidationMixin, Templ
                     "enrollments", filter=Q(enrollments__status="enrolling"), distinct=True
                 )
             )
+            .annotate(remaining_capacity=Greatest(F("capacity") - F("enrolled_count"), 0))
             .order_by("course__code", "section_number")
         )
 
