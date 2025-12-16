@@ -14,11 +14,57 @@
 <h2>我的教学班</h2>
 <ul>
   {% for section in sections %}
-  <li>{{ section.course.name }} - {{ section.semester.name }}（{{ section.section_number }}班）{% if section.grades_locked %} · 成绩已锁定{% endif %}</li>
+  <li>{{ section.course.name }} - {{ section.semester.name }}（{{ section.section_number }}班）{% if section.grades_locked %} · 成绩已锁定{% else %} · 可录入成绩{% endif %}</li>
   {% empty %}
   <li>暂未分配教学班。</li>
   {% endfor %}
 </ul>
+
+<h2>选课名单/成绩录入</h2>
+<table style="width:100%; border-collapse: collapse;">
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>学生</th>
+      <th>课程</th>
+      <th>学期</th>
+      <th>状态</th>
+      <th>成绩</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for enrollment in enrollments %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ enrollment.student.user.get_full_name|default:enrollment.student.user.username }}</td>
+      <td>{{ enrollment.section.course.name }}</td>
+      <td>{{ enrollment.section.semester.code }}</td>
+      <td>{{ enrollment.get_status_display }}</td>
+      <td>{{ enrollment.final_grade|default:"-" }}</td>
+      <td>
+        <form method="post" action="{% url 'grade_update' enrollment.section_id %}" style="display:flex; gap:4px; align-items:center;">
+          {% csrf_token %}
+          <input type="hidden" name="enrollment_id" value="{{ enrollment.id }}" />
+          <label class="sr-only" for="grade-{{ enrollment.id }}">成绩</label>
+          <select name="final_grade" id="grade-{{ enrollment.id }}">
+            <option value="">--</option>
+            {% for code,label in enrollment.GRADE_CHOICES %}
+            <option value="{{ code }}" {% if enrollment.final_grade == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <select name="status">
+            {% for code,label in enrollment.STATUS_CHOICES %}
+            <option value="{{ code }}" {% if enrollment.status == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <button class="button secondary" type="submit" {% if enrollment.section.grades_locked %}disabled{% endif %}>保存</button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">暂无选课记录</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
 
 <h2>待我审核</h2>
 <table style="width:100%; border-collapse: collapse;">

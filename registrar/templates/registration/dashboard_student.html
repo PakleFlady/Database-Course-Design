@@ -4,6 +4,10 @@
 <h1>学生自助服务</h1>
 <p>报名、退课、重修、容量候补等都可在此发起。默认密码仍可通过“修改密码”入口更新。</p>
 
+{% if gpa %}
+<div class="hint">当前 GPA：{{ gpa }}</div>
+{% endif %}
+
 <div class="hint">
   <strong>快速说明：</strong>
   <ul>
@@ -23,6 +27,56 @@
   {{ form.reason }}
   <input class="button" type="submit" value="提交申请" />
 </form>
+
+<h2>已选课程与成绩</h2>
+<table style="width:100%; border-collapse: collapse; margin-top: 12px;">
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>课程</th>
+      <th>学期</th>
+      <th>状态</th>
+      <th>成绩</th>
+      <th>绩点</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for enrollment in enrollments %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ enrollment.section.course.name }}</td>
+      <td>{{ enrollment.section.semester.code }}</td>
+      <td>{{ enrollment.get_status_display }}</td>
+      <td>{{ enrollment.final_grade|default:"-" }}</td>
+      <td>{{ enrollment.grade_points|default:"-" }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">暂未有选课记录</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>可选教学班</h2>
+<table style="width:100%; border-collapse: collapse; margin-top: 12px;">
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>课程</th>
+      <th>教师</th>
+      <th>学期</th>
+      <th>容量</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for section in available_sections %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ section.course.code }} {{ section.course.name }}</td>
+      <td>{{ section.instructor.user.get_full_name|default:section.instructor.user.username }}</td>
+      <td>{{ section.semester.code }}</td>
+      <td>{{ section.capacity }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">暂无教学班</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
 
 <h2>我的申请</h2>
 <table style="width:100%; border-collapse: collapse; margin-top: 12px;">

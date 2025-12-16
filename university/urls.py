@@ -15,6 +15,8 @@ from registrar.views import (
     StudentDashboardView,
     InstructorDashboardView,
     UserLogoutView,
+    InstructorGradeUpdateView,
+    AdminSectionLockToggleView,
 )
 
 urlpatterns = [
@@ -30,7 +32,17 @@ urlpatterns = [
     path("accounts/home/", AccountHomeView.as_view(), name="account_home"),
     path("accounts/home/student/", StudentDashboardView.as_view(), name="student_home"),
     path("accounts/home/instructor/", InstructorDashboardView.as_view(), name="instructor_home"),
+    path(
+        "accounts/home/instructor/sections/<int:section_id>/grade/",
+        InstructorGradeUpdateView.as_view(),
+        name="grade_update",
+    ),
     path("accounts/home/admin/", AdminDashboardView.as_view(), name="admin_home"),
+    path(
+        "accounts/home/admin/sections/<int:section_id>/lock/",
+        AdminSectionLockToggleView.as_view(),
+        name="section_lock_toggle",
+    ),
     path("accounts/password-change/", ForcePasswordChangeView.as_view(), name="force_password_change"),
     path(
         "accounts/password-change/done/",
