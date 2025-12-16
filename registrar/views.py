@@ -123,11 +123,9 @@ class AccountHomeView(LoginRequiredMixin, TemplateView):
 class UserLogoutView(LogoutView):
     """Show a friendly logout confirmation page instead of silent redirect."""
 
-    next_page = None
+    # 始终回到登录入口，方便用户在退出后立即选择学生或教师身份重新登录
+    next_page = reverse_lazy("login_portal")
     template_name = "registration/logout_success.html"
-
-    def get_next_page(self):
-        return None
 
 
 class EnrollmentValidationMixin:
