@@ -78,4 +78,8 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/accounts/home/"
+LOGOUT_REDIRECT_URL = LOGIN_URL
+
 DEFAULT_INITIAL_PASSWORD = "ChangeMe123!"

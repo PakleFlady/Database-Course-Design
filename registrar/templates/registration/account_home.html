@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}个人首页{% endblock %}
+{% block content %}
+<h1>欢迎，{{ request.user.username }}！</h1>
+<p>你已成功登录，可根据身份访问相应功能。若需要修改默认密码，请使用下方入口。</p>
+
+<div class="hint">
+  <ul>
+    <li>默认密码：<strong>ChangeMe123!</strong>（首次登录会自动提示修改）</li>
+    <li>如果你没有权限访问某些页面，请联系管理员在后台分配角色/权限。</li>
+  </ul>
+</div>
+
+<div class="actions">
+  <a class="button" href="{% url 'force_password_change' %}">修改密码</a>
+  <a class="button secondary" href="{% url 'logout' %}">退出登录</a>
+  <a class="muted-link" href="/admin/">进入管理员后台（需权限）</a>
+</div>
+{% endblock %}

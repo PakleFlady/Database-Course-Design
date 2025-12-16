@@ -41,7 +41,7 @@
    ```bash
    python manage.py runserver 0.0.0.0:8000
    ```
-   浏览器访问 `http://127.0.0.1:8000/admin/`，使用 `admin/admin123` 登录，即可看到院系、课程、教学班、上课时间、学生、教师、选课记录等模块并进行维护。
+   浏览器访问 `http://127.0.0.1:8000/accounts/login/` 选择“学生/教师登录”，或直接访问 `http://127.0.0.1:8000/admin/` 使用 `admin/admin123` 登录，即可看到院系、课程、教学班、上课时间、学生、教师、选课记录等模块并进行维护。
 
 ## 关键模型与规则
 - **StudentProfile / InstructorProfile**：与 Django User 绑定的一对一档案，存储性别、院系、联系方式、专业/职称等。

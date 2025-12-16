@@ -2,8 +2,14 @@
 from __future__ import annotations
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import PasswordChangeDoneView, PasswordChangeView
+from django.contrib.auth.views import (
+    LoginView,
+    LogoutView,
+    PasswordChangeDoneView,
+    PasswordChangeView,
+)
 from django.urls import reverse_lazy
+from django.views.generic import TemplateView
 
 from .models import UserSecurity
 
@@ -29,3 +35,35 @@ class ForcePasswordChangeView(LoginRequiredMixin, PasswordChangeView):
 
 class ForcePasswordChangeDoneView(LoginRequiredMixin, PasswordChangeDoneView):
     template_name = "registration/force_password_change_done.html"
+
+
+class LoginPortalView(TemplateView):
+    template_name = "registration/login_portal.html"
+
+
+class StudentLoginView(LoginView):
+    template_name = "registration/student_login.html"
+    redirect_authenticated_user = True
+    extra_context = {"role_label": "学生", "switch_url_name": "instructor_login"}
+
+    def get_success_url(self):
+        redirect_to = self.get_redirect_url()
+        return redirect_to or reverse_lazy("account_home")
+
+
+class InstructorLoginView(LoginView):
+    template_name = "registration/instructor_login.html"
+    redirect_authenticated_user = True
+    extra_context = {"role_label": "教师", "switch_url_name": "student_login"}
+
+    def get_success_url(self):
+        redirect_to = self.get_redirect_url()
+        return redirect_to or reverse_lazy("account_home")
+
+
+class AccountHomeView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/account_home.html"
+
+
+class UserLogoutView(LogoutView):
+    next_page = reverse_lazy("login_portal")

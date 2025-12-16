@@ -25,10 +25,15 @@ class ForcePasswordChangeMiddleware:
             except NoReverseMatch:
                 change_url = done_url = ""
 
+            try:
+                logout_url = reverse("logout")
+            except NoReverseMatch:
+                logout_url = getattr(settings, "LOGOUT_URL", "/admin/logout/")
+
             allowed_paths = {
                 change_url,
                 done_url,
-                getattr(settings, "LOGOUT_URL", "/admin/logout/"),
+                logout_url,
             }
 
             is_static = bool(getattr(settings, "STATIC_URL", "")) and request.path.startswith(settings.STATIC_URL)
