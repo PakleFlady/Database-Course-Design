@@ -1,6 +1,8 @@
 """Views for authentication helpers and self-service portals."""
 from __future__ import annotations
 
+from collections import defaultdict
+
 from django.contrib import messages
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -127,21 +129,46 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["form"] = kwargs.get("form") or self.get_form()
-        context["requests"] = (
-            StudentRequest.objects.filter(student=self.request.user.student_profile)
-            .select_related("section__course", "section__semester")
-            .prefetch_related("logs")
+        request_qs = StudentRequest.objects.filter(student=self.request.user.student_profile).select_related(
+            "section__course", "section__semester"
         )
-        context["enrollments"] = (
+        enrollments = list(
             Enrollment.objects.filter(student=self.request.user.student_profile)
             .select_related("section__course", "section__semester")
             .order_by("section__semester__start_date")
         )
+        active_sections = [
+            enrollment.section
+            for enrollment in enrollments
+            if enrollment.status in ["enrolling", "waitlisted", "passed", "failed"]
+        ]
+
+        context["form"] = kwargs.get("form") or self.get_form()
+        context["requests"] = request_qs.prefetch_related("logs")
+        context["request_summary"] = {
+            "pending": request_qs.filter(status="pending").count(),
+            "approved": request_qs.filter(status="approved").count(),
+            "rejected": request_qs.filter(status="rejected").count(),
+        }
+        context["enrollments"] = enrollments
         context["available_sections"] = CourseSection.objects.select_related(
             "course", "semester", "instructor__user"
         )
-        context["gpa"] = self._calculate_gpa(context["enrollments"])
+        context["gpa"] = self._calculate_gpa(enrollments)
+        context["credit_load"] = sum(
+            enrollment.section.course.credits
+            for enrollment in enrollments
+            if enrollment.status in ["enrolling", "waitlisted"]
+        )
+        context["schedule"] = MeetingTime.objects.filter(section__in=active_sections).select_related(
+            "section__course", "section__semester"
+        )
+        context["failed_enrollments"] = [
+            enrollment
+            for enrollment in enrollments
+            if enrollment.status == "failed" or enrollment.final_grade in ["F", "NP"]
+        ]
+        context["profile"] = self.request.user.student_profile
         return context
 
     def _get_handler(self, request_type):
@@ -272,23 +299,54 @@ class InstructorDashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         instructor = self.request.user.instructor_profile
-        context["sections"] = CourseSection.objects.filter(instructor=instructor).select_related(
-            "course", "semester"
+        sections = list(
+            CourseSection.objects.filter(instructor=instructor)
+            .select_related("course", "semester")
+            .prefetch_related("meetingtime_set")
         )
-        context["pending_requests"] = (
-            StudentRequest.objects.filter(
-                section__in=context["sections"],
-                status="pending",
-                request_type__in=["retake", "cross_college", "credit_overload", "waitlist_promotion"],
-            )
-            .select_related("student__user", "section__course", "section__semester")
-            .prefetch_related("logs")
-        )
-        context["enrollments"] = (
-            Enrollment.objects.filter(section__in=context["sections"])
+        pending_requests = StudentRequest.objects.filter(
+            section__in=sections,
+            status="pending",
+            request_type__in=["retake", "cross_college", "credit_overload", "waitlist_promotion"],
+        ).select_related("student__user", "section__course", "section__semester")
+
+        enrollments = list(
+            Enrollment.objects.filter(section__in=sections)
             .select_related("student__user", "section__course", "section__semester")
             .order_by("section__course__code")
         )
+
+        per_section_counts: dict[int, dict[str, int]] = defaultdict(lambda: {"passed": 0, "failed": 0, "in_progress": 0})
+        for enrollment in enrollments:
+            bucket = per_section_counts[enrollment.section_id]
+            if enrollment.status == "passed":
+                bucket["passed"] += 1
+            elif enrollment.status == "failed" or enrollment.final_grade in ["F", "NP"]:
+                bucket["failed"] += 1
+            else:
+                bucket["in_progress"] += 1
+
+        context["sections"] = sections
+        context["pending_requests"] = pending_requests.prefetch_related("logs")
+        context["enrollments"] = enrollments
+        context["grade_overview"] = [
+            {
+                "section": section,
+                "passed": per_section_counts[section.id]["passed"],
+                "failed": per_section_counts[section.id]["failed"],
+                "in_progress": per_section_counts[section.id]["in_progress"],
+            }
+            for section in sections
+        ]
+        context["schedule"] = MeetingTime.objects.filter(section__in=sections).select_related(
+            "section__course", "section__semester"
+        )
+        context["stats"] = {
+            "section_count": len(sections),
+            "pending_count": pending_requests.count(),
+            "enrollment_count": len(enrollments),
+        }
+        context["profile"] = instructor
         return context
 
 

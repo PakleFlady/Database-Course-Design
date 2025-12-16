@@ -60,7 +60,7 @@ class Command(BaseCommand):
 
         for user in (carol_user, dave_user, alice_user, bob_user):
             if not user.has_usable_password():
-                user.set_password("demo123")
+                user.set_password("12345678")
                 user.save()
 
         carol_profile, _ = InstructorProfile.objects.get_or_create(user=carol_user, defaults={"department": cse, "title": "副教授"})

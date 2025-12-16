@@ -2,95 +2,192 @@
 {% block title %}教师工作台{% endblock %}
 {% block content %}
 <h1>教师工作台</h1>
-<p>查看你负责的教学班、审批学生的重修/跨院/超学分/候补转正申请，并关注成绩填报锁定状态。</p>
+<p>查看你负责的教学班、审批学生申请，并在锁定前快速完成成绩录入。下方提供课表、成绩统计和审批入口，便于日常教学管理。</p>
 
-<div class="hint">
-  <ul>
-    <li>若教学班“成绩填报锁定”为开启，则需联系管理员解锁后才能录入或修改成绩。</li>
-    <li>审批操作会记录审核日志，便于后续追溯。</li>
-  </ul>
+<div class="grid two">
+  <div class="stat-card">
+    <div class="stat-label">负责教学班</div>
+    <div class="stat-value">{{ stats.section_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">待我审批</div>
+    <div class="stat-value">{{ stats.pending_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">当前选课人数</div>
+    <div class="stat-value">{{ stats.enrollment_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">个人信息</div>
+    <div class="stat-value">{{ profile.title|default:"教师" }} · {{ profile.department.name }}</div>
+  </div>
 </div>
 
-<h2>我的教学班</h2>
-<ul>
-  {% for section in sections %}
-  <li>{{ section.course.name }} - {{ section.semester.name }}（{{ section.section_number }}班）{% if section.grades_locked %} · 成绩已锁定{% else %} · 可录入成绩{% endif %}</li>
-  {% empty %}
-  <li>暂未分配教学班。</li>
-  {% endfor %}
-</ul>
+<div class="section">
+  <h2>我的教学班</h2>
+  <div class="hint">
+    <ul>
+      <li>“成绩填报锁定”开启时需要联系管理员解锁后才能录入或修改成绩。</li>
+      <li>审批操作会记录审核日志，便于后续追溯。</li>
+    </ul>
+  </div>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>学期</th>
+        <th>班号</th>
+        <th>容量</th>
+        <th>成绩状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for section in sections %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ section.course.code }} {{ section.course.name }}</td>
+        <td>{{ section.semester.name }}</td>
+        <td>{{ section.section_number }}</td>
+        <td>{{ section.capacity }}</td>
+        <td>{% if section.grades_locked %}<span class="badge">成绩已锁定</span>{% else %}<span class="badge">可录入</span>{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂未分配教学班。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 
-<h2>选课名单/成绩录入</h2>
-<table style="width:100%; border-collapse: collapse;">
-  <thead>
-    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
-      <th>学生</th>
-      <th>课程</th>
-      <th>学期</th>
-      <th>状态</th>
-      <th>成绩</th>
-      <th>操作</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for enrollment in enrollments %}
-    <tr style="border-bottom:1px solid #f1f5f9;">
-      <td>{{ enrollment.student.user.get_full_name|default:enrollment.student.user.username }}</td>
-      <td>{{ enrollment.section.course.name }}</td>
-      <td>{{ enrollment.section.semester.code }}</td>
-      <td>{{ enrollment.get_status_display }}</td>
-      <td>{{ enrollment.final_grade|default:"-" }}</td>
-      <td>
-        <form method="post" action="{% url 'grade_update' enrollment.section_id %}" style="display:flex; gap:4px; align-items:center;">
-          {% csrf_token %}
-          <input type="hidden" name="enrollment_id" value="{{ enrollment.id }}" />
-          <label class="sr-only" for="grade-{{ enrollment.id }}">成绩</label>
-          <select name="final_grade" id="grade-{{ enrollment.id }}">
-            <option value="">--</option>
-            {% for code,label in enrollment.GRADE_CHOICES %}
-            <option value="{{ code }}" {% if enrollment.final_grade == code %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          <select name="status">
-            {% for code,label in enrollment.STATUS_CHOICES %}
-            <option value="{{ code }}" {% if enrollment.status == code %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          <button class="button secondary" type="submit" {% if enrollment.section.grades_locked %}disabled{% endif %}>保存</button>
-        </form>
-      </td>
-    </tr>
-    {% empty %}
-    <tr><td colspan="6">暂无选课记录</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="section">
+  <h2>上课时间安排</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>星期</th>
+        <th>时间</th>
+        <th>课程</th>
+        <th>学期</th>
+        <th>地点</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for slot in schedule %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ slot.get_day_of_week_display }}</td>
+        <td>{{ slot.start_time }} - {{ slot.end_time }}</td>
+        <td>{{ slot.section.course.code }} {{ slot.section.course.name }}</td>
+        <td>{{ slot.section.semester.code }}</td>
+        <td>{{ slot.location|default:"待定" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂无课表安排。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 
-<h2>待我审核</h2>
-<table style="width:100%; border-collapse: collapse;">
-  <thead>
-    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
-      <th>学生</th>
-      <th>类型</th>
-      <th>教学班</th>
-      <th>提交时间</th>
-      <th>操作</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for item in pending_requests %}
-    <tr style="border-bottom:1px solid #f1f5f9;">
-      <td>{{ item.student.user.username }}</td>
-      <td>{{ item.get_request_type_display }}</td>
-      <td>{{ item.section.course.name }} ({{ item.section.semester.code }})</td>
-      <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
-      <td><a class="button secondary" href="{% url 'approval_queue' %}">进入审批队列</a></td>
-    </tr>
-    {% empty %}
-    <tr><td colspan="5">暂无待审核申请</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="section">
+  <h2>成绩概览</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>学期</th>
+        <th>已通过</th>
+        <th>未通过</th>
+        <th>选课中/候补</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in grade_overview %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ item.section.course.name }}</td>
+        <td>{{ item.section.semester.code }}</td>
+        <td>{{ item.passed }}</td>
+        <td>{{ item.failed }}</td>
+        <td>{{ item.in_progress }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂无选课记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>选课名单/成绩录入</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>学生</th>
+        <th>课程</th>
+        <th>学期</th>
+        <th>状态</th>
+        <th>成绩</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for enrollment in enrollments %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ enrollment.student.user.get_full_name|default:enrollment.student.user.username }}</td>
+        <td>{{ enrollment.section.course.name }}</td>
+        <td>{{ enrollment.section.semester.code }}</td>
+        <td>{{ enrollment.get_status_display }}</td>
+        <td>{{ enrollment.final_grade|default:"-" }}</td>
+        <td>
+          <form method="post" action="{% url 'grade_update' enrollment.section_id %}" style="display:flex; gap:4px; align-items:center;">
+            {% csrf_token %}
+            <input type="hidden" name="enrollment_id" value="{{ enrollment.id }}" />
+            <label class="sr-only" for="grade-{{ enrollment.id }}">成绩</label>
+            <select name="final_grade" id="grade-{{ enrollment.id }}">
+              <option value="">--</option>
+              {% for code,label in enrollment.GRADE_CHOICES %}
+              <option value="{{ code }}" {% if enrollment.final_grade == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <select name="status">
+              {% for code,label in enrollment.STATUS_CHOICES %}
+              <option value="{{ code }}" {% if enrollment.status == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <button class="button secondary" type="submit" {% if enrollment.section.grades_locked %}disabled{% endif %}>保存</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">暂无选课记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>待我审核</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>学生</th>
+        <th>类型</th>
+        <th>教学班</th>
+        <th>提交时间</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in pending_requests %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ item.student.user.username }}</td>
+        <td>{{ item.get_request_type_display }}</td>
+        <td>{{ item.section.course.name }} ({{ item.section.semester.code }})</td>
+        <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+        <td><a class="button secondary" href="{% url 'approval_queue' %}">进入审批队列</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂无待审核申请</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 
 <div class="actions">
   <a class="button secondary" href="{% url 'approval_queue' %}">审批队列</a>
