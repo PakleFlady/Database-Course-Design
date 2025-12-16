@@ -216,7 +216,6 @@ class CoursePrerequisite(models.Model):
 class Enrollment(models.Model):
     STATUS_CHOICES = [
         ("enrolling", "选课中"),
-        ("waitlisted", "候补"),
         ("dropped", "已退课"),
         ("passed", "已通过"),
         ("failed", "未通过"),
@@ -252,10 +251,8 @@ class StudentRequest(models.Model):
         ("enroll", "报名/选课"),
         ("drop", "退课申请"),
         ("retake", "重修申请"),
-        ("waitlist", "容量候补"),
         ("cross_college", "跨院选课审批"),
         ("credit_overload", "超学分申请"),
-        ("waitlist_promotion", "候补转正审批"),
     ]
 
     STATUS_CHOICES = [
@@ -303,7 +300,7 @@ class StudentRequest(models.Model):
         return f"{self.get_request_type_display()} - {self.student} ({self.get_status_display()})"
 
     def requires_approval(self) -> bool:
-        return self.request_type in {"retake", "cross_college", "credit_overload", "waitlist_promotion"}
+        return self.request_type in {"retake", "cross_college", "credit_overload"}
 
 
 class ApprovalLog(models.Model):

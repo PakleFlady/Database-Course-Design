@@ -368,7 +368,7 @@ class Command(BaseCommand):
         Enrollment.objects.get_or_create(
             student=charlie_profile,
             section=section7,
-            defaults={"status": "waitlisted"},
+            defaults={"status": "enrolling"},
         )
         Enrollment.objects.get_or_create(
             student=diana_profile,
@@ -388,7 +388,7 @@ class Command(BaseCommand):
         Enrollment.objects.get_or_create(
             student=eric_profile,
             section=section8,
-            defaults={"status": "waitlisted"},
+            defaults={"status": "enrolling"},
         )
         Enrollment.objects.get_or_create(
             student=fiona_profile,

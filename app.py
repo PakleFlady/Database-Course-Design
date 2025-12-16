@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS enrollments (
     enrollment_id   INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id      INTEGER NOT NULL REFERENCES students(student_id),
     section_id      INTEGER NOT NULL REFERENCES course_sections(section_id),
-    status          TEXT NOT NULL DEFAULT 'enrolling' CHECK (status IN ('enrolling', 'waitlisted', 'dropped', 'completed', 'failed', 'passed', 'retake_pending')),
+    status          TEXT NOT NULL DEFAULT 'enrolling' CHECK (status IN ('enrolling', 'dropped', 'completed', 'failed', 'passed', 'retake_pending')),
     requested_at    TEXT NOT NULL DEFAULT (datetime('now')),
     approved_at     TEXT,
     dropped_at      TEXT,
@@ -410,8 +410,7 @@ def capacity_status(conn: sqlite3.Connection, section_id: int) -> sqlite3.Row:
     return conn.execute(
         """
         SELECT cs.section_id, cs.capacity, cs.waitlist_capacity,
-               SUM(CASE WHEN e.status = 'enrolling' THEN 1 ELSE 0 END) AS enrolled,
-               SUM(CASE WHEN e.status = 'waitlisted' THEN 1 ELSE 0 END) AS waitlisted
+               SUM(CASE WHEN e.status = 'enrolling' THEN 1 ELSE 0 END) AS enrolled
         FROM course_sections cs
         LEFT JOIN enrollments e ON e.section_id = cs.section_id
         WHERE cs.section_id = ?

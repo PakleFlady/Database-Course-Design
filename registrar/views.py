@@ -140,7 +140,7 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
         active_sections = [
             enrollment.section
             for enrollment in enrollments
-            if enrollment.status in ["enrolling", "waitlisted", "passed", "failed"]
+            if enrollment.status in ["enrolling", "passed", "failed"]
         ]
 
         context["form"] = kwargs.get("form") or self.get_form()
@@ -158,7 +158,7 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
         context["credit_load"] = sum(
             enrollment.section.course.credits
             for enrollment in enrollments
-            if enrollment.status in ["enrolling", "waitlisted"]
+            if enrollment.status == "enrolling"
         )
         context["schedule"] = MeetingTime.objects.filter(section__in=active_sections).select_related(
             "section__course", "section__semester"
@@ -175,11 +175,9 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
         handlers = {
             "enroll": self._handle_enrollment,
             "drop": self._handle_drop,
-            "waitlist": self._handle_waitlist,
             "retake": self._handle_pending,
             "cross_college": self._handle_pending,
             "credit_overload": self._handle_pending,
-            "waitlist_promotion": self._handle_pending,
         }
         return handlers.get(request_type)
 
@@ -202,18 +200,6 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
         request_obj.save()
         return None
 
-    def _handle_waitlist(self, request_obj: StudentRequest):
-        student = request_obj.student
-        section = request_obj.section
-        Enrollment.objects.update_or_create(
-            student=student,
-            section=section,
-            defaults={"status": "waitlisted"},
-        )
-        request_obj.status = "approved"
-        request_obj.save()
-        return None
-
     def _handle_drop(self, request_obj: StudentRequest):
         try:
             enrollment = Enrollment.objects.get(student=request_obj.student, section=request_obj.section)
@@ -228,7 +214,7 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
     def _validate_enrollment(self, student, section):
         active_enrollments = Enrollment.objects.filter(
             student=student,
-            status__in=["enrolling", "waitlisted"],
+            status="enrolling",
         ).select_related("section__course")
 
         # credit load check
@@ -239,7 +225,7 @@ class StudentDashboardView(LoginRequiredMixin, TemplateView):
         # capacity check
         current_count = Enrollment.objects.filter(section=section, status="enrolling").count()
         if current_count >= section.capacity:
-            return "该教学班已满员，可尝试候补申请。"
+            return "该教学班已满员，暂无法继续选课。"
 
         # time conflict check
         new_slots = MeetingTime.objects.filter(section=section)
@@ -307,7 +293,7 @@ class InstructorDashboardView(LoginRequiredMixin, TemplateView):
         pending_requests = StudentRequest.objects.filter(
             section__in=sections,
             status="pending",
-            request_type__in=["retake", "cross_college", "credit_overload", "waitlist_promotion"],
+            request_type__in=["retake", "cross_college", "credit_overload"],
         ).select_related("student__user", "section__course", "section__semester")
 
         enrollments = list(
@@ -381,7 +367,7 @@ class ApprovalQueueView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         queryset = StudentRequest.objects.filter(
             status="pending",
-            request_type__in=["retake", "cross_college", "credit_overload", "waitlist_promotion"],
+            request_type__in=["retake", "cross_college", "credit_overload"],
         ).select_related("student__user", "section__course", "section__semester")
 
         if hasattr(self.request.user, "instructor_profile") and not self.request.user.is_staff:

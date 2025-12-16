@@ -1,6 +1,7 @@
 """Admin configuration for the course registration domain."""
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.helpers import ActionForm
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
@@ -58,8 +59,8 @@ class MeetingTimeInline(admin.TabularInline):
     fields = ("day_of_week", "start_time", "end_time", "location")
 
 
-class EnrollMajorActionForm(forms.Form):
-    major = forms.CharField(label="专业关键字", required=True)
+class EnrollMajorActionForm(ActionForm):
+    major = forms.CharField(label="专业关键字", required=False)
     college = forms.CharField(label="学院关键字", required=False)
 
 

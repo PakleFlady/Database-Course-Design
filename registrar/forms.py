@@ -101,7 +101,7 @@ class SelfServiceRequestForm(forms.ModelForm):
         cleaned = super().clean()
         request_type = cleaned.get("request_type")
         section = cleaned.get("section")
-        if request_type in {"enroll", "drop", "retake", "waitlist", "waitlist_promotion", "cross_college"} and not section:
+        if request_type in {"enroll", "drop", "retake", "cross_college"} and not section:
             raise forms.ValidationError("请选择要办理的教学班。")
         if not self.student:
             raise forms.ValidationError("仅学生账号可提交申请。")

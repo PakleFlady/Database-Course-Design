@@ -112,10 +112,9 @@ JOIN departments d ON d.department_id = c.department_id
 JOIN majors m ON m.department_id = d.department_id
 WHERE m.major_id = :major_id AND c.course_type = :course_type AND c.active = TRUE;
 
--- 10. Waitlist and capacity status for a section
+-- 10. Capacity status for a section
 SELECT cs.section_id, cs.capacity, cs.waitlist_capacity,
-       COUNT(e.enrollment_id) FILTER (WHERE e.status = 'enrolling') AS enrolled,
-       COUNT(e.enrollment_id) FILTER (WHERE e.status = 'waitlisted') AS waitlisted
+       COUNT(e.enrollment_id) FILTER (WHERE e.status = 'enrolling') AS enrolled
 FROM course_sections cs
 LEFT JOIN enrollments e ON e.section_id = cs.section_id
 WHERE cs.section_id = :section_id

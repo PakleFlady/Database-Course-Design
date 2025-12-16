@@ -42,7 +42,7 @@ erDiagram
 - **course_sections**: `section_id` (PK), `course_id` (FK), `semester_id` (FK), `instructor_id` (FK), `section_code` (e.g., `A01`), `capacity`, `waitlist_capacity`, `location_note`, `status` (planned/open/closed/cancelled), `language`, `grading_scheme` (numeric/letter/pass_fail), `created_at`.
 - **section_meetings**: `meeting_id` (PK), `section_id` (FK), `day_of_week` (1=Mon), `start_time`, `end_time`, `room`, `building`. Time conflicts are detected on this table for both students and instructors.
 - **course_prerequisites**: `course_id` (FK), `prereq_course_id` (FK), `min_grade` (letter or numeric threshold), `all_of` flag to support composite prerequisite logic. Composite logic can be implemented with AND over rows and an optional grouping field for OR branches.
-- **enrollments**: `enrollment_id` (PK), `student_id` (FK), `section_id` (FK), `status` (enrolling, dropped, waitlisted, completed, failed, passed, retake_pending), `requested_at`, `approved_at`, `dropped_at`, `grade_mode` (normal/audit), unique constraint on (student_id, section_id).
+- **enrollments**: `enrollment_id` (PK), `student_id` (FK), `section_id` (FK), `status` (enrolling, dropped, completed, failed, passed, retake_pending), `requested_at`, `approved_at`, `dropped_at`, `grade_mode` (normal/audit), unique constraint on (student_id, section_id).
 - **grades**: `grade_id` (PK), `enrollment_id` (FK, unique), `numeric_grade`, `letter_grade`, `grade_points`, `recorded_at`, `recorded_by` (FK to `instructors`), `is_final`.
 - **enrollment_overrides**: `override_id` (PK), `enrollment_id` (FK), `override_type` (capacity, prerequisite, time_conflict, retake), `approved_by` (FK to admins), `approved_at`, `reason`.
 
@@ -66,7 +66,7 @@ erDiagram
    - **Prerequisite check**: ensure required rows in `course_prerequisites` have passing grades on prior `courses`.
    - **Time conflict check**: compare requested section's `section_meetings` with existing enrolled sections for the same student.
    - **Credit load check**: sum planned credits for the student in the semester; reject outside 10–40 credit bounds.
-   - **Capacity check**: ensure `enrollments` count below `capacity`; otherwise place on waitlist or require override.
+   - **Capacity check**: ensure `enrollments` count below `capacity`;否则需要管理员干预或调整容量。
 3. Admins may approve overrides in `enrollment_overrides`, e.g., retake permission for previously passed courses.
 
 ### Grading and GPA Calculation
@@ -123,7 +123,7 @@ erDiagram
 
 ## Extension Ideas
 - Add `buildings` and `rooms` tables with capacities for room scheduling.
-- Implement waitlist promotion jobs that move students from waitlist to enrolled based on drop events.
+- 自动化容量监控与调班：满额时提醒管理员调整容量或开设新班级。
 - Provide REST or GraphQL endpoints for integration with a front-end or administrative portal.
 - Add messaging/notification tables for enrollment approvals or prerequisite denials.
 
