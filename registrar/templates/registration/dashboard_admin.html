@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}管理员首页{% endblock %}
+{% block content %}
+<h1>管理员工作台</h1>
+<p>快速查看审批队列、成绩填报锁定情况以及用户创建入口。管理员首次登录已不强制修改密码。</p>
+
+<div class="actions">
+  <a class="button" href="/admin/">进入后台</a>
+  <a class="button secondary" href="{% url 'approval_queue' %}">审批队列</a>
+  <a class="button secondary" href="{% url 'force_password_change' %}">修改密码</a>
+</div>
+
+<h2>待处理申请</h2>
+<table style="width:100%; border-collapse: collapse;">
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>学生</th>
+      <th>类型</th>
+      <th>教学班</th>
+      <th>提交时间</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in pending_requests %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ item.student.user.username }}</td>
+      <td>{{ item.get_request_type_display }}</td>
+      <td>{% if item.section %}{{ item.section.course.name }} ({{ item.section.semester.code }}){% else %}-{% endif %}</td>
+      <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">暂无待处理申请</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

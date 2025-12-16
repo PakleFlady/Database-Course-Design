@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}教师登录{% endblock %}
+{% block content %}
+<h1>教师登录</h1>
+<p>请输入教师账号与密码。若是第一次登录，请使用默认密码 <strong>ChangeMe123!</strong> 并按提示修改。</p>
+
+{% if form.non_field_errors %}
+  <div class="alert">{{ form.non_field_errors }}</div>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  <div>
+    <label for="id_username">用户名</label>
+    {{ form.username }}
+    {% if form.username.errors %}<div class="alert">{{ form.username.errors|striptags }}</div>{% endif %}
+  </div>
+  <div>
+    <label for="id_password">密码</label>
+    {{ form.password }}
+    {% if form.password.errors %}<div class="alert">{{ form.password.errors|striptags }}</div>{% endif %}
+  </div>
+  {% if next %}
+    <input type="hidden" name="next" value="{{ next }}" />
+  {% endif %}
+  <input type="submit" class="button" value="登录" />
+</form>
+
+<div class="actions">
+  <a class="muted-link" href="{% url 'student_login' %}">切换到学生登录</a>
+  <a class="muted-link" href="{% url 'login_portal' %}">返回登录入口</a>
+</div>
+{% endblock %}

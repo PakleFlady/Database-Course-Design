@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}统一登录入口{% endblock %}
+{% block content %}
+<h1>学生 / 教师登录</h1>
+<p>请选择对应身份进入系统。初始登录请使用管理员分配的账号，默认密码为 <strong>ChangeMe123!</strong>，首次登录会强制要求修改密码。</p>
+
+<div class="actions">
+  <a class="button" href="{% url 'student_login' %}">学生登录</a>
+  <a class="button secondary" href="{% url 'instructor_login' %}">教师登录</a>
+  <a class="muted-link" href="/admin/">前往管理员后台</a>
+</div>
+
+<div class="hint">
+  <strong>温馨提示：</strong> 如看到“请先修改默认密码”提示，请完成密码更新后再继续访问。
+</div>
+{% endblock %}

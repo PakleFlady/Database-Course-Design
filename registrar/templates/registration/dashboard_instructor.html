@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}教师工作台{% endblock %}
+{% block content %}
+<h1>教师工作台</h1>
+<p>查看你负责的教学班、审批学生的重修/跨院/超学分/候补转正申请，并关注成绩填报锁定状态。</p>
+
+<div class="hint">
+  <ul>
+    <li>若教学班“成绩填报锁定”为开启，则需联系管理员解锁后才能录入或修改成绩。</li>
+    <li>审批操作会记录审核日志，便于后续追溯。</li>
+  </ul>
+</div>
+
+<h2>我的教学班</h2>
+<ul>
+  {% for section in sections %}
+  <li>{{ section.course.name }} - {{ section.semester.name }}（{{ section.section_number }}班）{% if section.grades_locked %} · 成绩已锁定{% endif %}</li>
+  {% empty %}
+  <li>暂未分配教学班。</li>
+  {% endfor %}
+</ul>
+
+<h2>待我审核</h2>
+<table style="width:100%; border-collapse: collapse;">
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>学生</th>
+      <th>类型</th>
+      <th>教学班</th>
+      <th>提交时间</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in pending_requests %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ item.student.user.username }}</td>
+      <td>{{ item.get_request_type_display }}</td>
+      <td>{{ item.section.course.name }} ({{ item.section.semester.code }})</td>
+      <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+      <td><a class="button secondary" href="{% url 'approval_queue' %}">进入审批队列</a></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">暂无待审核申请</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="actions">
+  <a class="button secondary" href="{% url 'approval_queue' %}">审批队列</a>
+  <a class="button secondary" href="{% url 'force_password_change' %}">修改密码</a>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}

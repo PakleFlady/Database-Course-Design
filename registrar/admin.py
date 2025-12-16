@@ -1,7 +1,11 @@
 """Admin configuration for the course registration domain."""
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
+from .forms import UserCreationWithProfileForm
 from .models import (
+    ApprovalLog,
     Course,
     CoursePrerequisite,
     CourseSection,
@@ -11,7 +15,40 @@ from .models import (
     MeetingTime,
     Semester,
     StudentProfile,
+    StudentRequest,
 )
+
+User = get_user_model()
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UserAdmin(DjangoUserAdmin):
+    add_form = UserCreationWithProfileForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "role",
+                    "department",
+                    "college",
+                    "major",
+                    "is_staff",
+                    "is_superuser",
+                    "is_active",
+                    "groups",
+                    "user_permissions",
+                ),
+            },
+        ),
+    )
+
 
 
 class MeetingTimeInline(admin.TabularInline):
@@ -22,8 +59,15 @@ class MeetingTimeInline(admin.TabularInline):
 
 @admin.register(CourseSection)
 class CourseSectionAdmin(admin.ModelAdmin):
-    list_display = ("course", "semester", "section_number", "instructor", "capacity")
-    list_filter = ("semester", "course__department")
+    list_display = (
+        "course",
+        "semester",
+        "section_number",
+        "instructor",
+        "capacity",
+        "grades_locked",
+    )
+    list_filter = ("semester", "course__department", "grades_locked")
     search_fields = ("course__code", "course__name", "instructor__user__username")
     inlines = [MeetingTimeInline]
 
@@ -40,6 +84,20 @@ class EnrollmentAdmin(admin.ModelAdmin):
     list_display = ("student", "section", "status", "final_grade", "grade_points")
     list_filter = ("status", "section__semester", "section__course")
     search_fields = ("student__user__username", "section__course__code")
+
+
+@admin.register(StudentRequest)
+class StudentRequestAdmin(admin.ModelAdmin):
+    list_display = ("student", "request_type", "section", "status", "created_at")
+    list_filter = ("request_type", "status")
+    search_fields = ("student__user__username", "section__course__code")
+
+
+@admin.register(ApprovalLog)
+class ApprovalLogAdmin(admin.ModelAdmin):
+    list_display = ("request", "action", "actor", "created_at")
+    list_filter = ("action",)
+    search_fields = ("request__student__user__username",)
 
 
 @admin.register(StudentProfile)

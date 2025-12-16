@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}审批队列{% endblock %}
+{% block content %}
+<h1>审批队列</h1>
+<p>处理重修、跨院选课、超学分、候补转正等需要人工审核的申请，所有操作会记录日志。</p>
+
+<table style="width:100%; border-collapse: collapse;">
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>学生</th>
+      <th>类型</th>
+      <th>教学班</th>
+      <th>原因</th>
+      <th>提交时间</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in pending_requests %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ item.student.user.username }}</td>
+      <td>{{ item.get_request_type_display }}</td>
+      <td>{% if item.section %}{{ item.section.course.name }} ({{ item.section.semester.code }}){% else %}-{% endif %}</td>
+      <td>{{ item.reason }}</td>
+      <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+      <td>
+        <form method="post" action="{% url 'approval_decision' item.pk %}" style="display:flex; gap:6px; align-items:center;">
+          {% csrf_token %}
+          {{ decision_form.decision }}
+          {{ decision_form.note }}
+          <input class="button" type="submit" value="提交" />
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">暂无待审批申请</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="actions">
+  <a class="button secondary" href="{% url 'account_home' %}">返回个人首页</a>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}

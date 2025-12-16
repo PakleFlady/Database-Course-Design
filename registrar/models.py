@@ -8,6 +8,20 @@ from django.db.models import F, Q
 User = get_user_model()
 
 
+class UserSecurity(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="security", verbose_name="账号")
+    must_change_password = models.BooleanField("首次登录需修改密码", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "账号安全设置"
+        verbose_name_plural = "账号安全设置"
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"Security settings for {self.user.username}"
+
+
 class Department(models.Model):
     code = models.CharField("院系代码", max_length=20, unique=True)
     name = models.CharField("院系名称", max_length=255)
@@ -106,6 +120,7 @@ class CourseSection(models.Model):
     instructor = models.ForeignKey(InstructorProfile, on_delete=models.PROTECT, related_name="sections", verbose_name="教师")
     section_number = models.PositiveSmallIntegerField("教学班号", default=1)
     capacity = models.PositiveIntegerField("容量", default=60)
+    grades_locked = models.BooleanField("成绩填报锁定", default=False)
     notes = models.TextField("备注", blank=True)
 
     class Meta:
@@ -205,3 +220,95 @@ class Enrollment(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.student} -> {self.section} ({self.status})"
+
+
+class StudentRequest(models.Model):
+    REQUEST_TYPE_CHOICES = [
+        ("enroll", "报名/选课"),
+        ("drop", "退课申请"),
+        ("retake", "重修申请"),
+        ("waitlist", "容量候补"),
+        ("cross_college", "跨院选课审批"),
+        ("credit_overload", "超学分申请"),
+        ("waitlist_promotion", "候补转正审批"),
+    ]
+
+    STATUS_CHOICES = [
+        ("pending", "待审批"),
+        ("approved", "已通过"),
+        ("rejected", "已驳回"),
+    ]
+
+    student = models.ForeignKey(
+        StudentProfile,
+        on_delete=models.CASCADE,
+        related_name="requests",
+        verbose_name="学生",
+    )
+    section = models.ForeignKey(
+        CourseSection,
+        on_delete=models.SET_NULL,
+        related_name="requests",
+        null=True,
+        blank=True,
+        verbose_name="教学班",
+    )
+    request_type = models.CharField("申请类型", max_length=32, choices=REQUEST_TYPE_CHOICES)
+    reason = models.TextField("申请原因", blank=True)
+    status = models.CharField("审批状态", max_length=16, choices=STATUS_CHOICES, default="pending")
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="handled_requests",
+        verbose_name="审核人",
+    )
+    reviewed_at = models.DateTimeField("审核时间", null=True, blank=True)
+    metadata = models.JSONField("附加信息", default=dict, blank=True)
+    created_at = models.DateTimeField("提交时间", auto_now_add=True)
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        verbose_name = "学生自助申请"
+        verbose_name_plural = "学生自助申请"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.get_request_type_display()} - {self.student} ({self.get_status_display()})"
+
+    def requires_approval(self) -> bool:
+        return self.request_type in {"retake", "cross_college", "credit_overload", "waitlist_promotion"}
+
+
+class ApprovalLog(models.Model):
+    ACTION_CHOICES = [
+        ("approved", "通过"),
+        ("rejected", "驳回"),
+    ]
+
+    request = models.ForeignKey(
+        StudentRequest,
+        on_delete=models.CASCADE,
+        related_name="logs",
+        verbose_name="申请",
+    )
+    action = models.CharField("操作", max_length=16, choices=ACTION_CHOICES)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_logs",
+        verbose_name="执行人",
+    )
+    note = models.TextField("审核意见", blank=True)
+    created_at = models.DateTimeField("时间", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "审批日志"
+        verbose_name_plural = "审批日志"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.request} -> {self.get_action_display()}"
