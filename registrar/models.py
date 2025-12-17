@@ -95,6 +95,50 @@ class Course(models.Model):
         return f"{self.code} - {self.name}"
 
 
+class ProgramPlan(models.Model):
+    name = models.CharField("方案名称", max_length=255)
+    department = models.ForeignKey(
+        Department, on_delete=models.PROTECT, related_name="program_plans", verbose_name="学院"
+    )
+    major = models.CharField("面向专业", max_length=255)
+    academic_year = models.CharField("适用年级/年份", max_length=20)
+    enrollment_start = models.DateField("选课开始时间", null=True, blank=True)
+    enrollment_end = models.DateField("选课结束时间", null=True, blank=True)
+    total_credits = models.DecimalField("建议总学分", max_digits=5, decimal_places=1, null=True, blank=True)
+    is_active = models.BooleanField("启用", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "人才培养方案"
+        verbose_name_plural = "人才培养方案"
+        ordering = ["-academic_year", "department__code", "major"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.major}（{self.academic_year}）"
+
+
+class ProgramRequirement(models.Model):
+    plan = models.ForeignKey(
+        ProgramPlan, on_delete=models.CASCADE, related_name="requirements", verbose_name="所属方案"
+    )
+    category = models.CharField("课程类别", max_length=50, choices=Course.COURSE_TYPE_CHOICES)
+    required_credits = models.DecimalField("建议修读学分", max_digits=4, decimal_places=1)
+    recommended_term = models.CharField("建议学期/年级", max_length=50, blank=True)
+    selection_start = models.DateField("选课开始时间", null=True, blank=True)
+    selection_end = models.DateField("选课结束时间", null=True, blank=True)
+    notes = models.TextField("备注", blank=True)
+    courses = models.ManyToManyField(Course, related_name="program_requirements", blank=True)
+
+    class Meta:
+        verbose_name = "培养方案要求"
+        verbose_name_plural = "培养方案要求"
+        ordering = ["plan", "category", "recommended_term"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.plan} - {self.get_category_display()}"
+
+
 class InstructorProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="instructor_profile", verbose_name="账号")
     department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="instructors", verbose_name="所属院系")

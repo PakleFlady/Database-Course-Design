@@ -11,6 +11,7 @@ from registrar.views import (
     ForcePasswordChangeView,
     InstructorLoginView,
     LoginPortalView,
+    CurriculumPlanView,
     StudentEnrollmentView,
     AdminDashboardView,
     ApprovalDecisionView,
@@ -67,6 +68,7 @@ urlpatterns = [
         StudentTranscriptExportView.as_view(),
         name="student_transcript_export",
     ),
+    path("plans/", CurriculumPlanView.as_view(), name="curriculum_plan"),
     path(
         "accounts/home/student/requests/",
         StudentRequestLogView.as_view(),

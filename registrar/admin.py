@@ -14,6 +14,8 @@ from .models import (
     CourseSection,
     Department,
     Enrollment,
+    ProgramPlan,
+    ProgramRequirement,
     InstructorProfile,
     MeetingTime,
     Semester,
@@ -124,6 +126,43 @@ class CourseAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "credits", "course_type", "department")
     list_filter = ("course_type", "department")
     search_fields = ("code", "name")
+
+
+class ProgramRequirementInline(admin.TabularInline):
+    model = ProgramRequirement
+    extra = 0
+    filter_horizontal = ("courses",)
+
+
+@admin.register(ProgramPlan)
+class ProgramPlanAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "major",
+        "department",
+        "academic_year",
+        "is_active",
+        "enrollment_start",
+        "enrollment_end",
+    )
+    list_filter = ("department", "is_active", "academic_year")
+    search_fields = ("name", "major")
+    inlines = [ProgramRequirementInline]
+
+
+@admin.register(ProgramRequirement)
+class ProgramRequirementAdmin(admin.ModelAdmin):
+    list_display = (
+        "plan",
+        "category",
+        "required_credits",
+        "recommended_term",
+        "selection_start",
+        "selection_end",
+    )
+    list_filter = ("category", "plan")
+    search_fields = ("plan__name", "plan__major", "courses__name")
+    filter_horizontal = ("courses",)
 
 
 @admin.register(Enrollment)

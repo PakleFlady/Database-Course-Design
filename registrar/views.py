@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import datetime
 from collections import defaultdict
 
 from django.contrib import messages
@@ -36,14 +37,34 @@ from .forms import (
 )
 from .models import (
     ApprovalLog,
+    Course,
     CoursePrerequisite,
     CourseSection,
+    Department,
     Enrollment,
     MeetingTime,
+    ProgramPlan,
+    ProgramRequirement,
     StudentProfile,
     StudentRequest,
     UserSecurity,
 )
+
+
+def calculate_gpa_from_enrollments(enrollments):
+    grade_points = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
+    total_points = 0
+    total_credits = 0
+    for enroll in enrollments:
+        if enroll.final_grade:
+            pts = grade_points.get(enroll.final_grade)
+            if pts is None:
+                continue
+            total_points += float(enroll.section.course.credits) * pts
+            total_credits += float(enroll.section.course.credits)
+    if total_credits == 0:
+        return None
+    return round(total_points / total_credits, 2)
 
 
 class ForcePasswordChangeView(LoginRequiredMixin, PasswordChangeView):
@@ -154,6 +175,21 @@ class EnrollmentValidationMixin:
             status="enrolling",
         ).select_related("section__course")
 
+        passed_before = Enrollment.objects.filter(
+            student=student,
+            section__course=section.course,
+            status="passed",
+        ).exists()
+        if passed_before:
+            approved_retake = StudentRequest.objects.filter(
+                student=student,
+                request_type="retake",
+                section__course=section.course,
+                status="approved",
+            ).exists()
+            if not approved_retake:
+                return "已通过该课程，如需重修请先提交并通过教务管理员审批。"
+
         planned_credits = sum(e.section.course.credits for e in active_enrollments) + section.course.credits
         if planned_credits > 40:
             return "选课后总学分不得超过 40 学分。"
@@ -192,19 +228,7 @@ class EnrollmentValidationMixin:
         return None
 
     def _calculate_gpa(self, enrollments):
-        grade_points = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
-        total_points = 0
-        total_credits = 0
-        for enroll in enrollments:
-            if enroll.final_grade:
-                pts = grade_points.get(enroll.final_grade)
-                if pts is None:
-                    continue
-                total_points += float(enroll.section.course.credits) * pts
-                total_credits += float(enroll.section.course.credits)
-        if total_credits == 0:
-            return None
-        return round(total_points / total_credits, 2)
+        return calculate_gpa_from_enrollments(enrollments)
 
 
 class StudentPortalMixin(LoginRequiredMixin, EnrollmentValidationMixin):
@@ -558,6 +582,50 @@ class StudentTranscriptExportView(StudentPortalMixin, View):
         return response
 
 
+class CurriculumPlanView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/curriculum_plan.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        dept_code = self.request.GET.get("department")
+        major_keyword = self.request.GET.get("major")
+
+        plans = (
+            ProgramPlan.objects.filter(is_active=True)
+            .select_related("department")
+            .prefetch_related("requirements__courses")
+        )
+        if dept_code:
+            plans = plans.filter(department__code__iexact=dept_code)
+        if major_keyword:
+            plans = plans.filter(major__icontains=major_keyword)
+
+        plan_cards = []
+        today = datetime.date.today()
+        for plan in plans:
+            requirements = list(plan.requirements.all())
+            category_summary: dict[str, float] = defaultdict(float)
+            for req in requirements:
+                category_summary[req.get_category_display()] += float(req.required_credits)
+            plan_cards.append(
+                {
+                    "plan": plan,
+                    "requirements": requirements,
+                    "category_summary": category_summary,
+                    "is_open": bool(plan.enrollment_start and plan.enrollment_end and plan.enrollment_start <= today <= plan.enrollment_end),
+                }
+            )
+
+        context.update(
+            {
+                "plans": plan_cards,
+                "departments": Department.objects.all(),
+                "filters": {"department": dept_code or "", "major": major_keyword or ""},
+            }
+        )
+        return context
+
+
 class InstructorScheduleExportView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         if not hasattr(request.user, "instructor_profile"):
@@ -722,6 +790,52 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
         ).order_by("semester__start_date")
         context["bulk_form"] = kwargs.get("bulk_form") or AdminBulkEnrollmentForm()
         context["class_schedule_form"] = kwargs.get("class_schedule_form") or AdminClassScheduleForm()
+
+        enrollment_summary = (
+            Enrollment.objects.exclude(status="dropped")
+            .values("section__course__code", "section__course__name")
+            .annotate(
+                total=Count("id"),
+                passed=Count("id", filter=Q(status="passed") | Q(final_grade__in=["A", "B", "C", "D", "P"])),
+            )
+            .order_by("section__course__code")[:15]
+        )
+        course_pass_rates = []
+        for item in enrollment_summary:
+            total = item["total"] or 0
+            pass_rate = round((item["passed"] / total) * 100, 1) if total else None
+            course_pass_rates.append(
+                {
+                    "course_code": item["section__course__code"],
+                    "course_name": item["section__course__name"],
+                    "pass_rate": pass_rate,
+                    "total": total,
+                }
+            )
+
+        gpa_values = []
+        students = StudentProfile.objects.prefetch_related("enrollments__section__course")
+        for student in students:
+            gpa = calculate_gpa_from_enrollments(student.enrollments.all())
+            if gpa is not None:
+                gpa_values.append(gpa)
+
+        buckets = {"3.5-4.0": 0, "3.0-3.49": 0, "2.0-2.99": 0, "0-1.99": 0}
+        for gpa in gpa_values:
+            if gpa >= 3.5:
+                buckets["3.5-4.0"] += 1
+            elif gpa >= 3.0:
+                buckets["3.0-3.49"] += 1
+            elif gpa >= 2.0:
+                buckets["2.0-2.99"] += 1
+            else:
+                buckets["0-1.99"] += 1
+
+        context["grade_stats"] = {
+            "course_pass_rates": course_pass_rates,
+            "gpa_distribution": buckets,
+            "gpa_sample_size": len(gpa_values),
+        }
         return context
 
 
@@ -833,6 +947,9 @@ class ApprovalDecisionView(LoginRequiredMixin, View):
         except StudentRequest.DoesNotExist:
             return HttpResponseForbidden("记录不存在")
 
+        if req_obj.request_type == "retake" and not request.user.is_staff:
+            return HttpResponseForbidden("重修申请仅教务管理员可审批")
+
         if not (request.user.is_staff or (
             hasattr(request.user, "instructor_profile") and req_obj.section and req_obj.section.instructor == request.user.instructor_profile
         )):
@@ -853,6 +970,13 @@ class ApprovalDecisionView(LoginRequiredMixin, View):
         from .models import ApprovalLog
 
         ApprovalLog.objects.create(request=req_obj, action=decision, actor=request.user, note=note)
+
+        if decision == "approved" and req_obj.request_type == "retake" and req_obj.section:
+            Enrollment.objects.update_or_create(
+                student=req_obj.student,
+                section=req_obj.section,
+                defaults={"status": "enrolling"},
+            )
         return redirect("approval_queue")
 
 
