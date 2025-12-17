@@ -72,11 +72,12 @@ class Semester(models.Model):
 
 class Course(models.Model):
     COURSE_TYPE_CHOICES = [
-        ("general_required", "通识必修"),
+        ("foundational_required", "基础必修"),
+        ("general_elective", "全校通识课"),
         ("major_required", "专业必修"),
         ("major_elective", "专业选修"),
-        ("university_elective", "校级选修"),
-        ("practical", "实践/实验"),
+        ("practical", "实践课"),
+        ("lab", "实验课"),
     ]
 
     code = models.CharField("课程代码", max_length=20, unique=True)

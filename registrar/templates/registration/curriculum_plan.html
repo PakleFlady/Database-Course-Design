@@ -83,7 +83,7 @@
 </div>
 
 <div class="actions" style="margin-top:12px;">
-  <a class="button secondary" href="/admin/">在后台调整/新建方案</a>
+  {% if show_admin_link %}<a class="button secondary" href="/admin/">在后台调整/新建方案</a>{% endif %}
   <a class="muted-link" href="{% url 'account_home' %}">返回工作台</a>
 </div>
 {% endblock %}

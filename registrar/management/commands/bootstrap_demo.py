@@ -171,19 +171,19 @@ class Command(BaseCommand):
             student_profiles.append(profile)
 
         course_rows = [
-            {"code": "CSE100", "name": "程序设计基础", "credits": 3.0, "department": cse, "course_type": "general_required"},
+            {"code": "CSE100", "name": "程序设计基础", "credits": 3.0, "department": cse, "course_type": "foundational_required"},
             {"code": "CSE110", "name": "面向对象程序设计", "credits": 3.0, "department": cse, "course_type": "major_required"},
-            {"code": "CSE120", "name": "计算机系统导论", "credits": 3.0, "department": cse, "course_type": "general_required"},
-            {"code": "CSE130", "name": "离散数学", "credits": 3.0, "department": cse, "course_type": "general_required"},
-            {"code": "CSE140", "name": "线性代数 A", "credits": 3.0, "department": cse, "course_type": "general_required"},
-            {"code": "CSE150", "name": "程序设计实践", "credits": 2.0, "department": cse, "course_type": "practical"},
-            {"code": "CSE160", "name": "Web 开发基础", "credits": 2.0, "department": cse, "course_type": "university_elective"},
+            {"code": "CSE120", "name": "计算机系统导论", "credits": 3.0, "department": cse, "course_type": "foundational_required"},
+            {"code": "CSE130", "name": "离散数学", "credits": 3.0, "department": cse, "course_type": "foundational_required"},
+            {"code": "CSE140", "name": "线性代数 A", "credits": 3.0, "department": cse, "course_type": "foundational_required"},
+            {"code": "CSE150", "name": "程序设计实践", "credits": 2.0, "department": cse, "course_type": "lab"},
+            {"code": "CSE160", "name": "Web 开发基础", "credits": 2.0, "department": cse, "course_type": "general_elective"},
             {"code": "CSE170", "name": "移动应用开发", "credits": 2.0, "department": cse, "course_type": "major_elective"},
             {"code": "CSE180", "name": "Python 数据分析", "credits": 2.0, "department": cse, "course_type": "major_elective"},
             {"code": "CSE190", "name": "云计算概论", "credits": 2.5, "department": cse, "course_type": "major_elective"},
             {"code": "CSE200", "name": "数据结构", "credits": 3.0, "department": cse, "course_type": "major_required"},
             {"code": "CSE210", "name": "数据库系统", "credits": 3.0, "department": cse, "course_type": "major_required"},
-            {"code": "CSE215", "name": "数据库实践", "credits": 1.5, "department": cse, "course_type": "practical"},
+            {"code": "CSE215", "name": "数据库实践", "credits": 1.5, "department": cse, "course_type": "lab"},
             {"code": "CSE220", "name": "操作系统", "credits": 3.0, "department": cse, "course_type": "major_required"},
             {"code": "CSE230", "name": "计算机网络", "credits": 3.0, "department": cse, "course_type": "major_required"},
             {"code": "CSE240", "name": "算法设计与分析", "credits": 3.0, "department": cse, "course_type": "major_required"},
@@ -197,36 +197,36 @@ class Command(BaseCommand):
             {"code": "CSE320", "name": "编译原理", "credits": 3.0, "department": cse, "course_type": "major_required"},
             {"code": "CSE330", "name": "计算机图形学", "credits": 3.0, "department": cse, "course_type": "major_elective"},
             {"code": "CSE340", "name": "推荐系统基础", "credits": 2.5, "department": cse, "course_type": "major_elective"},
-            {"code": "MATH101", "name": "高等数学 I", "credits": 4.0, "department": math, "course_type": "general_required"},
-            {"code": "MATH102", "name": "高等数学 II", "credits": 4.0, "department": math, "course_type": "general_required"},
-            {"code": "MATH120", "name": "概率与统计", "credits": 3.0, "department": math, "course_type": "general_required"},
+            {"code": "MATH101", "name": "高等数学 I", "credits": 4.0, "department": math, "course_type": "foundational_required"},
+            {"code": "MATH102", "name": "高等数学 II", "credits": 4.0, "department": math, "course_type": "foundational_required"},
+            {"code": "MATH120", "name": "概率与统计", "credits": 3.0, "department": math, "course_type": "foundational_required"},
             {"code": "MATH130", "name": "数学建模", "credits": 2.0, "department": math, "course_type": "major_elective"},
             {"code": "MATH140", "name": "数理逻辑", "credits": 2.5, "department": math, "course_type": "major_elective"},
             {"code": "MATH150", "name": "组合数学", "credits": 3.0, "department": math, "course_type": "major_required"},
             {"code": "MATH160", "name": "数值分析", "credits": 3.0, "department": math, "course_type": "major_required"},
-            {"code": "MATH170", "name": "线性代数 B", "credits": 3.0, "department": math, "course_type": "general_required"},
+            {"code": "MATH170", "name": "线性代数 B", "credits": 3.0, "department": math, "course_type": "foundational_required"},
             {"code": "MATH180", "name": "随机过程", "credits": 2.5, "department": math, "course_type": "major_elective"},
             {"code": "MATH190", "name": "金融数学", "credits": 3.0, "department": math, "course_type": "major_elective"},
             {"code": "EE150", "name": "数字电路基础", "credits": 2.5, "department": ee, "course_type": "major_required"},
             {"code": "EE160", "name": "模拟电路", "credits": 2.5, "department": ee, "course_type": "major_required"},
             {"code": "EE170", "name": "信号与系统", "credits": 3.0, "department": ee, "course_type": "major_required"},
             {"code": "EE180", "name": "通信原理", "credits": 3.0, "department": ee, "course_type": "major_required"},
-            {"code": "EE190", "name": "嵌入式系统", "credits": 2.5, "department": ee, "course_type": "practical"},
+            {"code": "EE190", "name": "嵌入式系统", "credits": 2.5, "department": ee, "course_type": "lab"},
             {"code": "EE200", "name": "计算机组成", "credits": 3.0, "department": ee, "course_type": "major_required"},
-            {"code": "EE210", "name": "物联网概论", "credits": 2.0, "department": ee, "course_type": "university_elective"},
+            {"code": "EE210", "name": "物联网概论", "credits": 2.0, "department": ee, "course_type": "general_elective"},
             {"code": "EE220", "name": "数字信号处理", "credits": 3.0, "department": ee, "course_type": "major_elective"},
             {"code": "EE230", "name": "自动控制原理", "credits": 3.0, "department": ee, "course_type": "major_required"},
             {"code": "EE240", "name": "电子测量与仪表", "credits": 2.5, "department": ee, "course_type": "major_elective"},
-            {"code": "BUS110", "name": "管理学原理", "credits": 2.0, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS120", "name": "运营管理", "credits": 2.5, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS130", "name": "财务管理", "credits": 2.5, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS140", "name": "市场营销", "credits": 2.5, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS150", "name": "项目管理", "credits": 2.0, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS160", "name": "数据可视化", "credits": 2.0, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS170", "name": "管理信息系统", "credits": 2.5, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS180", "name": "组织行为学", "credits": 2.0, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS190", "name": "商业伦理", "credits": 2.0, "department": bus, "course_type": "university_elective"},
-            {"code": "BUS200", "name": "供应链管理", "credits": 2.5, "department": bus, "course_type": "university_elective"},
+            {"code": "BUS110", "name": "管理学原理", "credits": 2.0, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS120", "name": "运营管理", "credits": 2.5, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS130", "name": "财务管理", "credits": 2.5, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS140", "name": "市场营销", "credits": 2.5, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS150", "name": "项目管理", "credits": 2.0, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS160", "name": "数据可视化", "credits": 2.0, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS170", "name": "管理信息系统", "credits": 2.5, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS180", "name": "组织行为学", "credits": 2.0, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS190", "name": "商业伦理", "credits": 2.0, "department": bus, "course_type": "general_elective"},
+            {"code": "BUS200", "name": "供应链管理", "credits": 2.5, "department": bus, "course_type": "general_elective"},
         ]
 
         for row in course_rows:
@@ -355,11 +355,11 @@ class Command(BaseCommand):
         cse_plan.save()
 
         cse_requirement_rows = [
-            ("general_required", 36, "大一-大二", ["CSE100", "CSE120", "CSE130", "CSE140", "MATH101", "MATH102", "MATH170"]),
+            ("foundational_required", 36, "大一-大二", ["CSE100", "CSE120", "CSE130", "CSE140", "MATH101", "MATH102", "MATH170"]),
             ("major_required", 60, "大二-大三", ["CSE110", "CSE200", "CSE210", "CSE215", "CSE220", "CSE230", "CSE240", "CSE270", "CSE280", "CSE290", "CSE320"]),
             ("major_elective", 30, "大三-大四", ["CSE250", "CSE260", "CSE300", "CSE310", "CSE330", "CSE340", "CSE170", "CSE180", "CSE190"]),
-            ("university_elective", 16, "贯穿学年", ["BUS110", "BUS140", "BUS170", "BUS200", "EE210", "EE180", "EE220"]),
-            ("practical", 8, "每学年", ["CSE150", "CSE215", "EE190"]),
+            ("general_elective", 16, "贯穿学年", ["BUS110", "BUS140", "BUS170", "BUS200", "EE210", "EE180", "EE220"]),
+            ("lab", 8, "每学年", ["CSE150", "CSE215", "EE190"]),
         ]
 
         for category, credits, term, course_codes in cse_requirement_rows:
@@ -390,10 +390,10 @@ class Command(BaseCommand):
         math_plan.is_active = True
         math_plan.save()
         math_requirements = [
-            ("general_required", 30, "大一-大二", ["MATH101", "MATH102", "MATH170", "CSE100"]),
+            ("foundational_required", 30, "大一-大二", ["MATH101", "MATH102", "MATH170", "CSE100"]),
             ("major_required", 54, "大二-大三", ["MATH120", "MATH150", "MATH160", "MATH180", "MATH190"]),
             ("major_elective", 24, "大三-大四", ["MATH130", "MATH140", "BUS160", "CSE180"]),
-            ("university_elective", 12, "贯穿学年", ["BUS110", "BUS130", "BUS150", "EE210"]),
+            ("general_elective", 12, "贯穿学年", ["BUS110", "BUS130", "BUS150", "EE210"]),
         ]
         for category, credits, term, course_codes in math_requirements:
             req, _ = ProgramRequirement.objects.get_or_create(

@@ -234,7 +234,6 @@ class StudentContactForm(forms.ModelForm):
 class InstructorContactForm(forms.Form):
     email = forms.EmailField(label="邮箱", required=False)
     office_phone = forms.CharField(label="办公电话", required=False)
-    title = forms.CharField(label="职称", required=False)
 
     def __init__(self, *args, instructor=None, **kwargs):
         self.instructor = instructor
@@ -243,7 +242,6 @@ class InstructorContactForm(forms.Form):
             initial = {
                 "email": instructor.user.email,
                 "office_phone": instructor.office_phone,
-                "title": instructor.title,
             }
         kwargs.setdefault("initial", initial)
         super().__init__(*args, **kwargs)
@@ -256,8 +254,7 @@ class InstructorContactForm(forms.Form):
         user.email = data.get("email", "")
         user.save(update_fields=["email"])
         self.instructor.office_phone = data.get("office_phone", "")
-        self.instructor.title = data.get("title", "")
-        self.instructor.save(update_fields=["office_phone", "title"])
+        self.instructor.save(update_fields=["office_phone"])
         return self.instructor
 
 

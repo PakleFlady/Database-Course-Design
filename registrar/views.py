@@ -16,7 +16,7 @@ from django.contrib.auth.views import (
     PasswordChangeDoneView,
     PasswordChangeView,
 )
-from django.db.models import Count, Q, F, Sum
+from django.db.models import Count, Q, F, Sum, Avg, Max, Min
 from django.db.models.functions import Greatest
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect
@@ -603,7 +603,7 @@ class StudentTranscriptExportView(StudentPortalMixin, View):
                     enrollment.section.course.name,
                     enrollment.section.course.credits,
                     enrollment.get_status_display(),
-                    enrollment.final_grade or "-",
+                    enrollment.final_grade if enrollment.final_grade is not None else "-",
                     enrollment.grade_points or "-",
                 ]
             )
@@ -623,6 +623,16 @@ class CurriculumPlanView(LoginRequiredMixin, TemplateView):
             .select_related("department")
             .prefetch_related("requirements__courses")
         )
+        if hasattr(self.request.user, "student_profile"):
+            dept = self.request.user.student_profile.department
+            major = self.request.user.student_profile.major
+            if dept:
+                plans = plans.filter(department=dept)
+            if major:
+                plans = plans.filter(major__icontains=major)
+        elif hasattr(self.request.user, "instructor_profile") and not self.request.user.is_staff:
+            dept = self.request.user.instructor_profile.department
+            plans = plans.filter(department=dept)
         if dept_code:
             plans = plans.filter(department__code__iexact=dept_code)
         if major_keyword:
@@ -649,6 +659,7 @@ class CurriculumPlanView(LoginRequiredMixin, TemplateView):
                 "plans": plan_cards,
                 "departments": Department.objects.all(),
                 "filters": {"department": dept_code or "", "major": major_keyword or ""},
+                "show_admin_link": self.request.user.is_staff,
             }
         )
         return context
@@ -740,12 +751,30 @@ class InstructorDashboardView(LoginRequiredMixin, TemplateView):
         context["sections"] = sections
         context["pending_requests"] = pending_requests.prefetch_related("logs")
         context["enrollments"] = enrollments
+        analytics = (
+            Enrollment.objects.filter(section__in=sections, final_grade__isnull=False)
+            .values("section_id")
+            .annotate(
+                avg_grade=Avg("final_grade"),
+                max_grade=Max("final_grade"),
+                min_grade=Min("final_grade"),
+                total=Count("id"),
+                pass_count=Count("id", filter=Q(final_grade__gte=60)),
+            )
+        )
+        analytics_map = {item["section_id"]: item for item in analytics}
+
         context["grade_overview"] = [
             {
                 "section": section,
                 "passed": per_section_counts[section.id]["passed"],
                 "failed": per_section_counts[section.id]["failed"],
                 "in_progress": per_section_counts[section.id]["in_progress"],
+                "avg": round(analytics_map.get(section.id, {}).get("avg_grade"), 2) if analytics_map.get(section.id, {}).get("avg_grade") is not None else None,
+                "max": analytics_map.get(section.id, {}).get("max_grade"),
+                "min": analytics_map.get(section.id, {}).get("min_grade"),
+                "pass_rate": (round((analytics_map.get(section.id, {}).get("pass_count", 0) / analytics_map.get(section.id, {}).get("total", 1)) * 100, 1)
+                               if analytics_map.get(section.id, {}).get("total") else None),
             }
             for section in sections
         ]
@@ -1069,7 +1098,10 @@ class InstructorGradeUpdateView(LoginRequiredMixin, View):
             return redirect("instructor_home")
 
         enrollment.final_grade = grade
-        enrollment.status = status
+        if grade is not None:
+            enrollment.status = "passed" if grade >= 60 else "failed"
+        else:
+            enrollment.status = status
         enrollment.grade_points = grade_to_points(grade)
         enrollment.save(update_fields=["final_grade", "status", "grade_points"])
         messages.success(request, "已更新成绩记录。")

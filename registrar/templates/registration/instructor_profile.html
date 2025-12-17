@@ -14,7 +14,7 @@
 </div>
 
 <div class="section">
-  <h3>联系方式与职称</h3>
+  <h3>联系方式</h3>
   <form method="post">
     {% csrf_token %}
     {{ form.non_field_errors }}
@@ -22,10 +22,13 @@
     {{ form.email }}
     <label for="id_office_phone">办公电话</label>
     {{ form.office_phone }}
-    <label for="id_title">职称</label>
-    {{ form.title }}
     <button class="button" type="submit">保存</button>
   </form>
+</div>
+
+<div class="section">
+  <h3>当前职称（仅管理员可修改）</h3>
+  <p>{{ profile.title|default:"未设置" }}</p>
 </div>
 
 <div class="actions" style="margin-top:12px;">
