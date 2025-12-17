@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}学院详情{% endblock %}
+{% block content %}
+<h1>{{ department.name }}（{{ department.code }}）</h1>
+<p>查看学院下的班级、课程与成绩表现。可进一步进入班级或学生档案，支持从班级页面一键为整班同步选课。</p>
+
+<div class="grid two">
+  <div class="stat-card">
+    <div class="stat-label">学生人数</div>
+    <div class="stat-value">{{ students|length }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">教师人数 / 课程数</div>
+    <div class="stat-value">{{ instructor_count }} / {{ course_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">班级数量</div>
+    <div class="stat-value">{{ classes|length }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">GPA 样本分布</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      {% for item in gpa_chart %}
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:#6b7280;">
+          <span>{{ item.label }}</span>
+          <span>{{ item.count }} 人</span>
+        </div>
+        <div style="background:#e0f2fe; border-radius:8px; height:8px; overflow:hidden;">
+          <div style="height:8px; background:#0ea5e9; width:{{ item.width }}%;"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>班级列表</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>班级</th>
+        <th>人数</th>
+        <th>平均 GPA</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in classes %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ item.class_group.name }}</td>
+        <td>{{ item.student_count }}</td>
+        <td>{{ item.avg_gpa|default:"--" }}</td>
+        <td><a class="button secondary" href="{% url 'admin_class_detail' item.class_group.id %}">查看班级</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">暂无班级数据</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>热门课程（按选课次数）</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>选课人数</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for course in popular_courses %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ course.course_code }} {{ course.course_name }}</td>
+        <td>{{ course.count }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="2">暂无选课记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="actions" style="justify-content: space-between; flex-wrap: wrap; gap:10px;">
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="button secondary" href="{% url 'admin_home' %}">返回管理员工作台</a>
+    <a class="button secondary" href="{% url 'admin_home' %}">前往批量分配入口</a>
+  </div>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}

@@ -34,7 +34,7 @@
   <div class="hint">
     <ul>
       <li>“成绩填报锁定”开启时需要联系管理员解锁后才能录入或修改成绩。</li>
-      <li>审批操作会记录审核日志，便于后续追溯。</li>
+      <li>审批操作会记录审核日志，便于后续追溯。点击“数据分析”可查看该教学班的成绩分布、通过率和 GPA 分布图。</li>
     </ul>
   </div>
   <table>
@@ -45,6 +45,7 @@
         <th>班号</th>
         <th>容量</th>
         <th>成绩状态</th>
+        <th>分析</th>
       </tr>
     </thead>
     <tbody>
@@ -55,9 +56,10 @@
         <td>{{ section.section_number }}</td>
         <td>{{ section.capacity }}</td>
         <td>{% if section.grades_locked %}<span class="badge">成绩已锁定</span>{% else %}<span class="badge">可录入</span>{% endif %}</td>
+        <td><a class="button secondary" href="{% url 'section_analytics' section.id %}">数据分析</a></td>
       </tr>
       {% empty %}
-      <tr><td colspan="5">暂未分配教学班。</td></tr>
+      <tr><td colspan="6">暂未分配教学班。</td></tr>
       {% endfor %}
     </tbody>
   </table>

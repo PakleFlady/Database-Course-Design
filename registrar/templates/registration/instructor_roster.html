@@ -23,7 +23,10 @@
           <div style="font-size:16px; font-weight:700;">{{ item.section.course.code }} {{ item.section.course.name }}</div>
           <div class="muted">{{ item.section.semester.code }} · 班号 {{ item.section.section_number }}</div>
         </div>
-        <span class="muted">容量 {{ item.section.capacity }}</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span class="muted">容量 {{ item.section.capacity }}</span>
+          <a class="button secondary" href="{% url 'section_analytics' item.section.id %}" style="padding:8px 12px;">数据分析</a>
+        </div>
       </summary>
       <div class="panel-body" style="padding:0 16px 16px 16px;">
         <div class="hint" style="display:flex; gap:12px; flex-wrap:wrap;">

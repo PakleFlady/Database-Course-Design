@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}教学班数据分析{% endblock %}
+{% block content %}
+<h1>教学班数据分析</h1>
+<p>查看成绩分布、通过率、GPA 区间与选课状态，便于教学复盘与班级对比。若需录入/修改成绩，请返回教学班名单页面。</p>
+
+<div class="grid two">
+  <div class="stat-card">
+    <div class="stat-label">总选课人数</div>
+    <div class="stat-value">{{ stats.total }}</div>
+    <div class="muted">已录成绩 {{ stats.graded }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">平均分 / 通过率</div>
+    <div class="stat-value">{{ stats.avg|default:"--" }} / {{ stats.pass_rate|default:"--" }}%</div>
+    <div class="muted">最高 {{ stats.max|default:"--" }} · 最低 {{ stats.min|default:"--" }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">当前状态</div>
+    <div class="muted">通过 {{ status_counts.passed }} · 未通过 {{ status_counts.failed }} · 进行中 {{ status_counts.enrolling }} · 已退课 {{ status_counts.dropped }}</div>
+    <div class="muted">教师：{{ section.instructor.user.get_full_name|default:section.instructor.user.username }} · 班号 {{ section.section_number }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">上课时间</div>
+    <div class="muted">
+      {% for mt in meeting_times %}
+        <div>{{ mt.get_day_of_week_display }} {{ mt.start_time }}-{{ mt.end_time }} @ {{ mt.location }}</div>
+      {% empty %}
+        <div>暂无排课记录</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>成绩分布</h2>
+  <div class="hint">按成绩区间统计人数，可用于快速识别高分/低分占比。条形图长度与人数成比例。</div>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    {% for item in grade_chart %}
+    <div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; color:#6b7280;">
+        <span>{{ item.label }}</span>
+        <span>{{ item.count }} 人</span>
+      </div>
+      <div style="background:#eef2ff; border-radius:8px; height:10px; overflow:hidden;">
+        <div style="height:10px; background:#4f46e5; width:{{ item.width }}%;"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section">
+  <h2>GPA 区间</h2>
+  <div class="hint">基于学生个人 GPA 统计，方便观察班级成绩梯度。</div>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    {% for item in gpa_chart %}
+    <div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; color:#6b7280;">
+        <span>{{ item.label }}</span>
+        <span>{{ item.count }} 人</span>
+      </div>
+      <div style="background:#e0f2fe; border-radius:8px; height:10px; overflow:hidden;">
+        <div style="height:10px; background:#0284c7; width:{{ item.width }}%;"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section">
+  <h2>选课状态</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>学生</th>
+        <th>状态</th>
+        <th>成绩</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for enrollment in enrollments %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>
+          {{ enrollment.student.user.get_full_name|default:enrollment.student.user.username }}
+          {% if viewer_is_admin %}
+            · <a href="{% url 'admin_student_detail' enrollment.student.id %}">查看档案</a>
+          {% endif %}
+        </td>
+        <td>{{ enrollment.get_status_display }}</td>
+        <td>{{ enrollment.final_grade|default:"-" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3">暂无选课记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>关联申请</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>学生</th>
+        <th>类型</th>
+        <th>状态</th>
+        <th>提交时间</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for req in requests %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ req.student.user.username }}</td>
+        <td>{{ req.get_request_type_display }}</td>
+        <td>{{ req.get_status_display }}</td>
+        <td>{{ req.created_at|date:"Y-m-d H:i" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">暂无关联申请</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="actions" style="justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    {% if viewer_is_instructor %}
+      <a class="button secondary" href="{% url 'instructor_roster' %}">返回成绩名单</a>
+      <a class="button secondary" href="{% url 'instructor_home' %}">教师工作台</a>
+    {% endif %}
+    {% if viewer_is_admin %}
+      <a class="button secondary" href="{% url 'admin_home' %}">管理员工作台</a>
+    {% endif %}
+  </div>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}

@@ -12,6 +12,58 @@
 </div>
 
 <div class="section">
+  <h2>学院与班级概览</h2>
+  <div class="hint">点击学院卡片可展开班级列表与平均绩点概览，管理员可快速跳转到班级详情或院系详情。</div>
+  <div class="grid two">
+    {% for dept in departments %}
+    <div class="stat-card">
+      <div class="stat-label">{{ dept.code }} {{ dept.name }}</div>
+      <div class="stat-value">{{ dept.student_count }} 名学生</div>
+      <div class="muted">班级 {{ dept.class_count }} · 课程 {{ dept.course_count }} · 教师 {{ dept.instructor_count }}</div>
+      <a class="button secondary" href="{% url 'admin_department_detail' dept.id %}" style="margin-top:8px;">查看学院</a>
+    </div>
+    {% empty %}
+    <div class="stat-card">暂无学院记录。</div>
+    {% endfor %}
+  </div>
+
+  <h3 style="margin-top:16px;">重点班级（按人数排序）</h3>
+  <div class="grid two">
+    {% for card in class_cards %}
+    <div class="stat-card">
+      <div class="stat-label">{{ card.class_group.department.code }} - {{ card.class_group.name }}</div>
+      <div class="stat-value">{{ card.student_count }} 人</div>
+      <div class="muted">平均 GPA：{{ card.avg_gpa|default:"--" }}</div>
+      <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
+        {% for bucket, count in card.grade_distribution.items %}
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:#6b7280;">
+          <span>{{ bucket }}</span>
+          <span>{{ count }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <a class="button secondary" href="{% url 'admin_class_detail' card.class_group.id %}" style="margin-top:10px;">查看班级</a>
+    </div>
+    {% empty %}
+    <div class="stat-card">暂无班级数据。</div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section">
+  <h2>账号密码重置</h2>
+  <div class="hint">可通过用户名或邮箱快速重置学生/教师账号密码为默认值（{{ DEFAULT_INITIAL_PASSWORD|default:"12345678" }}），重置后会强制用户下次登录修改密码。</div>
+  <form method="post" action="{% url 'admin_reset_password' %}">
+    {% csrf_token %}
+    {{ reset_form.non_field_errors }}
+    <label for="id_user_identifier">账号</label>
+    {{ reset_form.user_identifier }}
+    <input type="hidden" name="next" value="{% url 'admin_home' %}" />
+    <button class="button secondary" type="submit">重置为默认密码</button>
+  </form>
+</div>
+
+<div class="section">
   <h2>按学院/班级批量分配课程</h2>
   <div class="hint">为同一学院或班级的学生批量创建选课记录，避免逐一添加。</div>
   <form method="post" action="{% url 'admin_bulk_enroll' %}">
@@ -121,6 +173,7 @@
       <th>学期</th>
       <th>状态</th>
       <th>操作</th>
+      <th>分析</th>
     </tr>
   </thead>
   <tbody>
@@ -136,9 +189,10 @@
           <button class="button secondary" type="submit">{% if section.grades_locked %}解锁{% else %}锁定{% endif %}</button>
         </form>
       </td>
+      <td><a class="button secondary" href="{% url 'section_analytics' section.id %}">成绩分析</a></td>
     </tr>
     {% empty %}
-    <tr><td colspan="5">暂无教学班</td></tr>
+    <tr><td colspan="6">暂无教学班</td></tr>
     {% endfor %}
   </tbody>
 </table>

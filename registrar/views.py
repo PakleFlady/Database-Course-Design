@@ -4,9 +4,11 @@ from __future__ import annotations
 import csv
 import datetime
 from collections import defaultdict
+from typing import Iterable
 
+from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import logout
+from django.contrib.auth import get_user_model, logout
 from django.contrib.auth import login
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -16,10 +18,10 @@ from django.contrib.auth.views import (
     PasswordChangeDoneView,
     PasswordChangeView,
 )
-from django.db.models import Count, Q, F, Sum, Avg, Max, Min
+from django.db.models import Count, Q, F, Sum, Avg, Max, Min, FloatField
 from django.db.models.functions import Greatest
 from django.http import HttpResponse, HttpResponseForbidden
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
@@ -28,6 +30,7 @@ from django.views.generic import TemplateView, FormView
 from .forms import (
     AdminBulkEnrollmentForm,
     AdminClassScheduleForm,
+    AdminUserPasswordResetForm,
     ApprovalDecisionForm,
     AccountRegistrationForm,
     InstructorAuthenticationForm,
@@ -50,6 +53,8 @@ from .models import (
     StudentRequest,
     UserSecurity,
 )
+
+User = get_user_model()
 
 
 def grade_to_points(grade):
@@ -75,6 +80,47 @@ def is_passing_grade(grade):
         return False
 
 
+def build_grade_distribution(enrollments: Iterable[Enrollment]):
+    buckets = {"90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "<60/未录入": 0}
+    for enroll in enrollments:
+        grade = enroll.final_grade
+        if grade is None:
+            buckets["<60/未录入"] += 1
+            continue
+        try:
+            numeric = float(grade)
+        except (TypeError, ValueError):
+            buckets["<60/未录入"] += 1
+            continue
+        if numeric >= 90:
+            buckets["90-100"] += 1
+        elif numeric >= 80:
+            buckets["80-89"] += 1
+        elif numeric >= 70:
+            buckets["70-79"] += 1
+        elif numeric >= 60:
+            buckets["60-69"] += 1
+        else:
+            buckets["<60/未录入"] += 1
+    return buckets
+
+
+def build_gpa_distribution(gpa_values: Iterable[float]):
+    buckets = {"3.5-4.0": 0, "3.0-3.49": 0, "2.0-2.99": 0, "0-1.99": 0}
+    for gpa in gpa_values:
+        if gpa is None:
+            continue
+        if gpa >= 3.5:
+            buckets["3.5-4.0"] += 1
+        elif gpa >= 3.0:
+            buckets["3.0-3.49"] += 1
+        elif gpa >= 2.0:
+            buckets["2.0-2.99"] += 1
+        else:
+            buckets["0-1.99"] += 1
+    return buckets
+
+
 def calculate_gpa_from_enrollments(enrollments):
     total_points = 0
     total_credits = 0
@@ -87,6 +133,35 @@ def calculate_gpa_from_enrollments(enrollments):
     if total_credits == 0:
         return None
     return round(total_points / total_credits, 2)
+
+
+def collect_student_gpas(enrollments: Iterable[Enrollment]):
+    per_student: dict[int, list[Enrollment]] = defaultdict(list)
+    for enroll in enrollments:
+        if enroll.student_id:
+            per_student[enroll.student_id].append(enroll)
+
+    gpa_map: dict[int, float] = {}
+    for student_id, records in per_student.items():
+        gpa = calculate_gpa_from_enrollments(records)
+        if gpa is not None:
+            gpa_map[student_id] = gpa
+    return gpa_map
+
+
+def summarize_course_popularity(enrollments: Iterable[Enrollment], limit: int = 8):
+    ranking: dict[tuple[str, str], int] = defaultdict(int)
+    for enroll in enrollments:
+        course = getattr(enroll.section, "course", None)
+        if not course:
+            continue
+        key = (course.code, course.name)
+        ranking[key] += 1
+    sorted_items = sorted(ranking.items(), key=lambda item: item[1], reverse=True)
+    return [
+        {"course_code": code, "course_name": name, "count": count}
+        for (code, name), count in sorted_items[:limit]
+    ]
 
 
 class ForcePasswordChangeView(LoginRequiredMixin, PasswordChangeView):
@@ -185,9 +260,28 @@ class AccountHomeView(LoginRequiredMixin, TemplateView):
 class UserLogoutView(LogoutView):
     """Show a friendly logout confirmation page instead of silent redirect."""
 
-    # 始终回到登录入口，方便用户在退出后立即选择学生或教师身份重新登录
-    next_page = reverse_lazy("login_portal")
     template_name = "registration/logout_success.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.logout_role = None
+        if request.user.is_authenticated:
+            if hasattr(request.user, "student_profile"):
+                self.logout_role = "student"
+            elif hasattr(request.user, "instructor_profile"):
+                self.logout_role = "instructor"
+            elif request.user.is_staff:
+                self.logout_role = "admin"
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_next_page(self):
+        # 如果明确指定 next 参数则尊重跳转，否则直接渲染“退出成功”页面，避免 302 后出现身份判断错误
+        return self.request.GET.get("next") or None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["logout_role"] = getattr(self, "logout_role", None)
+        context["login_portal_url"] = reverse_lazy("login_portal")
+        return context
 
 
 class EnrollmentValidationMixin:
@@ -854,6 +948,87 @@ class InstructorRosterView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class SectionAnalyticsView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/section_analytics.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.section = get_object_or_404(
+            CourseSection.objects.select_related("course", "semester", "instructor__user"),
+            pk=kwargs.get("section_id"),
+        )
+        allowed = request.user.is_staff or (
+            hasattr(request.user, "instructor_profile")
+            and self.section.instructor == request.user.instructor_profile
+        )
+        if not allowed:
+            return HttpResponseForbidden("仅课程教师或管理员可查看教学班分析")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        enrollments = list(
+            Enrollment.objects.filter(section=self.section)
+            .select_related("student__user")
+            .order_by("student__user__username")
+        )
+        stats = Enrollment.objects.filter(section=self.section).aggregate(
+            total=Count("id"),
+            graded=Count("id", filter=Q(final_grade__isnull=False)),
+            passed=Count("id", filter=Q(status="passed") | Q(final_grade__gte=60)),
+            avg_grade=Avg("final_grade"),
+            max_grade=Max("final_grade"),
+            min_grade=Min("final_grade"),
+        )
+        pass_rate = None
+        if stats.get("total"):
+            pass_rate = round((stats.get("passed", 0) / stats.get("total", 1)) * 100, 1)
+
+        status_counts = {
+            "passed": sum(1 for e in enrollments if e.status == "passed"),
+            "failed": sum(1 for e in enrollments if e.status == "failed" or (e.final_grade is not None and e.final_grade < 60)),
+            "enrolling": sum(1 for e in enrollments if e.status == "enrolling" and e.final_grade is None),
+            "dropped": sum(1 for e in enrollments if e.status == "dropped"),
+        }
+        grade_distribution = build_grade_distribution(enrollments)
+        gpa_distribution = build_gpa_distribution(collect_student_gpas(enrollments).values())
+        grade_max = max(grade_distribution.values()) if grade_distribution else 1
+        gpa_max = max(gpa_distribution.values()) if gpa_distribution else 1
+        grade_chart = [
+            {"label": label, "count": count, "width": int((count / (grade_max or 1)) * 100)}
+            for label, count in grade_distribution.items()
+        ]
+        gpa_chart = [
+            {"label": label, "count": count, "width": int((count / (gpa_max or 1)) * 100)}
+            for label, count in gpa_distribution.items()
+        ]
+        viewer_is_instructor = hasattr(self.request.user, "instructor_profile")
+
+        context.update(
+            {
+                "section": self.section,
+                "enrollments": enrollments,
+                "stats": {
+                    "total": stats.get("total", 0),
+                    "graded": stats.get("graded", 0),
+                    "avg": round(stats.get("avg_grade"), 2) if stats.get("avg_grade") is not None else None,
+                    "max": stats.get("max_grade"),
+                    "min": stats.get("min_grade"),
+                    "pass_rate": pass_rate,
+                },
+                "status_counts": status_counts,
+                "grade_distribution": grade_distribution,
+                "gpa_distribution": gpa_distribution,
+                "grade_chart": grade_chart,
+                "gpa_chart": gpa_chart,
+                "requests": StudentRequest.objects.filter(section=self.section).select_related("student__user"),
+                "meeting_times": self.section.meeting_times.all(),
+                "viewer_is_admin": self.request.user.is_staff,
+                "viewer_is_instructor": viewer_is_instructor,
+            }
+        )
+        return context
+
+
 class AdminDashboardView(LoginRequiredMixin, TemplateView):
     template_name = "registration/dashboard_admin.html"
 
@@ -872,6 +1047,8 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
         ).order_by("semester__start_date")
         context["bulk_form"] = kwargs.get("bulk_form") or AdminBulkEnrollmentForm()
         context["class_schedule_form"] = kwargs.get("class_schedule_form") or AdminClassScheduleForm()
+        context["reset_form"] = kwargs.get("reset_form") or AdminUserPasswordResetForm()
+        context["DEFAULT_INITIAL_PASSWORD"] = getattr(settings, "DEFAULT_INITIAL_PASSWORD", "12345678")
 
         enrollment_summary = (
             Enrollment.objects.exclude(status="dropped")
@@ -918,7 +1095,246 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
             "gpa_distribution": buckets,
             "gpa_sample_size": len(gpa_values),
         }
+
+        dept_overview = (
+            Department.objects.all()
+            .annotate(
+                student_count=Count("students", distinct=True),
+                instructor_count=Count("instructors", distinct=True),
+                course_count=Count("courses", distinct=True),
+                class_count=Count("class_groups", distinct=True),
+            )
+            .order_by("code")
+        )
+
+        top_classes = (
+            ClassGroup.objects.annotate(student_count=Count("students", distinct=True))
+            .select_related("department")
+            .order_by("-student_count")[:8]
+        )
+        enrollments = list(
+            Enrollment.objects.filter(student__class_group__in=top_classes)
+            .select_related("student", "section__course", "student__class_group")
+        )
+        gpa_map = collect_student_gpas(enrollments)
+
+        class_cards = []
+        for class_group in top_classes:
+            student_ids = list(
+                StudentProfile.objects.filter(class_group=class_group).values_list("id", flat=True)
+            )
+            gpas = [gpa_map[sid] for sid in student_ids if sid in gpa_map]
+            avg_gpa = round(sum(gpas) / len(gpas), 2) if gpas else None
+            class_enrollments = [e for e in enrollments if e.student.class_group_id == class_group.id]
+            class_cards.append(
+                {
+                    "class_group": class_group,
+                    "student_count": class_group.student_count,
+                    "avg_gpa": avg_gpa,
+                    "grade_distribution": build_grade_distribution(class_enrollments),
+                }
+            )
+
+        context["departments"] = dept_overview
+        context["class_cards"] = class_cards
         return context
+
+
+class AdminDepartmentDetailView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/department_detail.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            return HttpResponseForbidden("仅管理员可访问院系详情")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        department = get_object_or_404(Department, pk=self.kwargs.get("pk"))
+        students = list(
+            StudentProfile.objects.filter(department=department)
+            .select_related("user", "class_group")
+            .order_by("student_number")
+        )
+        classes = list(
+            ClassGroup.objects.filter(department=department)
+            .annotate(student_count=Count("students", distinct=True))
+            .order_by("name")
+        )
+        enrollments = list(
+            Enrollment.objects.filter(student__department=department)
+            .select_related("student__class_group", "section__course", "section__semester")
+        )
+
+        gpa_map = collect_student_gpas(enrollments)
+        gpa_distribution = build_gpa_distribution(gpa_map.values())
+        gpa_max = max(gpa_distribution.values()) if gpa_distribution else 1
+        gpa_chart = [
+            {"label": label, "count": count, "width": int((count / (gpa_max or 1)) * 100)}
+            for label, count in gpa_distribution.items()
+        ]
+        grade_distribution = build_grade_distribution(enrollments)
+        grade_max = max(grade_distribution.values()) if grade_distribution else 1
+        grade_chart = [
+            {"label": label, "count": count, "width": int((count / (grade_max or 1)) * 100)}
+            for label, count in grade_distribution.items()
+        ]
+        class_cards = []
+        for class_group in classes:
+            student_ids = [s.id for s in students if s.class_group_id == class_group.id]
+            gpas = [gpa_map[sid] for sid in student_ids if sid in gpa_map]
+            avg_gpa = round(sum(gpas) / len(gpas), 2) if gpas else None
+            class_enrollments = [e for e in enrollments if e.student.class_group_id == class_group.id]
+            class_cards.append(
+                {
+                    "class_group": class_group,
+                    "student_count": class_group.student_count,
+                    "avg_gpa": avg_gpa,
+                    "gpa_distribution": build_gpa_distribution(gpas),
+                    "grade_distribution": build_grade_distribution(class_enrollments),
+                }
+            )
+
+        context.update(
+            {
+                "department": department,
+                "students": students,
+                "classes": class_cards,
+                "course_count": department.courses.count(),
+                "instructor_count": department.instructors.count(),
+                "gpa_distribution": gpa_distribution,
+                "gpa_chart": gpa_chart,
+                "popular_courses": summarize_course_popularity(enrollments, limit=10),
+            }
+        )
+        return context
+
+
+class AdminClassGroupDetailView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/class_detail.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            return HttpResponseForbidden("仅管理员可访问班级详情")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        class_group = get_object_or_404(
+            ClassGroup.objects.select_related("department"), pk=self.kwargs.get("pk")
+        )
+        students = list(
+            StudentProfile.objects.filter(class_group=class_group)
+            .select_related("user")
+            .order_by("student_number")
+        )
+        enrollments = list(
+            Enrollment.objects.filter(student__class_group=class_group)
+            .select_related("student__user", "section__course", "section__semester")
+        )
+
+        gpa_map = collect_student_gpas(enrollments)
+        gpa_distribution = build_gpa_distribution(gpa_map.values())
+        gpa_max = max(gpa_distribution.values()) if gpa_distribution else 1
+        gpa_chart = [
+            {"label": label, "count": count, "width": int((count / (gpa_max or 1)) * 100)}
+            for label, count in gpa_distribution.items()
+        ]
+        student_rows = []
+        for student in students:
+            gpa = gpa_map.get(student.id)
+            student_rows.append(
+                {
+                    "student": student,
+                    "gpa": gpa,
+                    "active_enrollments": [e for e in enrollments if e.student_id == student.id and e.status != "dropped"],
+                }
+            )
+
+        context.update(
+            {
+                "class_group": class_group,
+                "students": student_rows,
+                "avg_gpa": round(sum(gpa_map.values()) / len(gpa_map), 2) if gpa_map else None,
+                "gpa_distribution": gpa_distribution,
+                "gpa_chart": gpa_chart,
+                "grade_distribution": grade_distribution,
+                "grade_chart": grade_chart,
+                "popular_courses": summarize_course_popularity(enrollments),
+                "schedule_form": kwargs.get("class_schedule_form")
+                or AdminClassScheduleForm(initial={"class_group": class_group}),
+            }
+        )
+        return context
+
+
+class AdminStudentDetailView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/student_detail.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            return HttpResponseForbidden("仅管理员可查看学生详情")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        student = get_object_or_404(
+            StudentProfile.objects.select_related("user", "department", "class_group"),
+            pk=self.kwargs.get("pk"),
+        )
+        enrollments = list(
+            Enrollment.objects.filter(student=student)
+            .select_related("section__course", "section__semester")
+            .order_by("section__semester__start_date")
+        )
+        gpa = calculate_gpa_from_enrollments(enrollments)
+        credit_load = sum(float(e.section.course.credits) for e in enrollments if e.status != "dropped")
+        grade_distribution = build_grade_distribution(enrollments)
+        grade_max = max(grade_distribution.values()) if grade_distribution else 1
+        grade_chart = [
+            {"label": label, "count": count, "width": int((count / (grade_max or 1)) * 100)}
+            for label, count in grade_distribution.items()
+        ]
+        context.update(
+            {
+                "student": student,
+                "enrollments": enrollments,
+                "gpa": gpa,
+                "credit_load": round(credit_load, 1),
+                "grade_distribution": grade_distribution,
+                "grade_chart": grade_chart,
+                "requests": StudentRequest.objects.filter(student=student).select_related("section__course"),
+                "reset_form": AdminUserPasswordResetForm(initial={"user_identifier": student.user.username}),
+            }
+        )
+        return context
+
+
+class AdminUserPasswordResetView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_staff:
+            return HttpResponseForbidden("仅管理员可重置密码")
+
+        form = AdminUserPasswordResetForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "请填写正确的用户名或邮箱。")
+            return redirect(request.POST.get("next") or "admin_home")
+
+        identifier = form.cleaned_data.get("user_identifier")
+        try:
+            user = User.objects.get(Q(username__iexact=identifier) | Q(email__iexact=identifier))
+        except User.DoesNotExist:
+            messages.error(request, "未找到该账号，请检查用户名或邮箱。")
+            return redirect(request.POST.get("next") or "admin_home")
+
+        new_password = getattr(settings, "DEFAULT_INITIAL_PASSWORD", "12345678")
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        security, _ = UserSecurity.objects.get_or_create(user=user)
+        security.must_change_password = True
+        security.save(update_fields=["must_change_password"])
+        messages.success(request, f"已重置 {user.username} 的密码为 {new_password}，下次登录需修改。")
+        return redirect(request.POST.get("next") or "admin_home")
 
 
 class AdminBulkEnrollmentView(LoginRequiredMixin, View):
@@ -969,6 +1385,8 @@ class AdminClassScheduleView(LoginRequiredMixin, View):
 
         form = AdminClassScheduleForm(request.POST)
         if not form.is_valid():
+            if request.POST.get("next"):
+                return AdminClassGroupDetailView.as_view()(request, pk=request.POST.get("class_group"), class_schedule_form=form)
             return AdminDashboardView.as_view()(request, class_schedule_form=form)
 
         class_group = form.cleaned_data["class_group"]
@@ -995,7 +1413,7 @@ class AdminClassScheduleView(LoginRequiredMixin, View):
             )
         else:
             messages.info(request, "所选班级的学生均已存在对应选课记录。")
-        return redirect("admin_home")
+        return redirect(request.POST.get("next") or "admin_home")
 
 
 class ApprovalQueueView(LoginRequiredMixin, TemplateView):

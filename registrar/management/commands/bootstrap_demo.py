@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import datetime
+import random
+from collections import defaultdict
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.conf import settings
@@ -42,17 +44,25 @@ class Command(BaseCommand):
         cse_class_d, _ = ClassGroup.objects.get_or_create(name="人工智能2301", department=cse)
         math_class_a, _ = ClassGroup.objects.get_or_create(name="数院2301", department=math)
         math_class_b, _ = ClassGroup.objects.get_or_create(name="统计2301", department=math)
+        math_class_c, _ = ClassGroup.objects.get_or_create(name="数院2302", department=math)
+        math_class_d, _ = ClassGroup.objects.get_or_create(name="统计2302", department=math)
         ee_class_a, _ = ClassGroup.objects.get_or_create(name="信息2301", department=ee)
         ee_class_b, _ = ClassGroup.objects.get_or_create(name="智能2301", department=ee)
+        ee_class_c, _ = ClassGroup.objects.get_or_create(name="自动化2301", department=ee)
+        ee_class_d, _ = ClassGroup.objects.get_or_create(name="电子2301", department=ee)
         bus_class_a, _ = ClassGroup.objects.get_or_create(name="信管2301", department=bus)
         bus_class_b, _ = ClassGroup.objects.get_or_create(name="工商2301", department=bus)
+        bus_class_c, _ = ClassGroup.objects.get_or_create(name="金融2301", department=bus)
+        bus_class_d, _ = ClassGroup.objects.get_or_create(name="会计2301", department=bus)
 
         class_groups = {
             cse: [cse_class_a, cse_class_b, cse_class_c, cse_class_d],
-            math: [math_class_a, math_class_b],
-            ee: [ee_class_a, ee_class_b],
-            bus: [bus_class_a, bus_class_b],
+            math: [math_class_a, math_class_b, math_class_c, math_class_d],
+            ee: [ee_class_a, ee_class_b, ee_class_c, ee_class_d],
+            bus: [bus_class_a, bus_class_b, bus_class_c, bus_class_d],
         }
+
+        dept_cycle = [cse, math, ee, bus]
 
         fall, _ = Semester.objects.get_or_create(
             code="2025FALL",
@@ -107,6 +117,23 @@ class Command(BaseCommand):
             profile, _ = InstructorProfile.objects.get_or_create(user=user, defaults={"department": dept, "title": title})
             instructor_profiles[username] = profile
 
+        title_pool = ["助教", "讲师", "副教授", "教授"]
+        target_instructors = 100
+        for idx in range(len(instructor_profiles), target_instructors):
+            username = f"inst{idx:03d}"
+            dept = dept_cycle[idx % len(dept_cycle)]
+            title = random.choice(title_pool)
+            user, _ = User.objects.get_or_create(
+                username=username,
+                defaults={"first_name": f"教师{idx:03d}", "email": f"{username}@example.com"},
+            )
+            ensure_password_and_security(user)
+            profile, _ = InstructorProfile.objects.get_or_create(
+                user=user,
+                defaults={"department": dept, "title": title},
+            )
+            instructor_profiles[username] = profile
+
         named_students = [
             ("alice", "Alice", "female", cse, cse_class_a, "软件工程"),
             ("bob", "Bob", "male", cse, cse_class_b, "计算机科学与技术"),
@@ -144,13 +171,12 @@ class Command(BaseCommand):
             ee: ["电子信息工程", "通信工程", "智能感知"],
             bus: ["信息管理与信息系统", "工商管理", "金融科技"],
         }
-        dept_cycle = [cse, math, ee, bus]
-        for idx in range(1, 111):
-            username = f"stu{idx:03d}"
+        for idx in range(1, 1001):
+            username = f"stu{idx:04d}"
             dept = dept_cycle[idx % len(dept_cycle)]
             group = class_groups[dept][idx % len(class_groups[dept])]
             major_choices = majors_map[dept]
-            major = major_choices[idx % len(major_choices)]
+            major = random.choice(major_choices)
             user, _ = User.objects.get_or_create(
                 username=username,
                 defaults={"first_name": f"学生{idx:03d}", "email": f"{username}@example.com"},
@@ -159,7 +185,7 @@ class Command(BaseCommand):
             profile, _ = StudentProfile.objects.get_or_create(
                 user=user,
                 defaults={
-                    "gender": "male" if idx % 2 else "female",
+                    "gender": random.choice(["male", "female"]),
                     "department": dept,
                     "class_group": group,
                     "major": major,
@@ -229,6 +255,28 @@ class Command(BaseCommand):
             {"code": "BUS200", "name": "供应链管理", "credits": 2.5, "department": bus, "course_type": "general_elective"},
         ]
 
+        existing_codes = {row["code"] for row in course_rows}
+        course_type_pool = [choice[0] for choice in Course.COURSE_TYPE_CHOICES]
+        seq = 0
+        while len(course_rows) < 100:
+            dept = dept_cycle[seq % len(dept_cycle)]
+            code = f"{dept.code}{500 + seq:03d}"
+            if code in existing_codes:
+                seq += 1
+                continue
+            name = f"{dept.name}专题 {seq + 1}"
+            course_rows.append(
+                {
+                    "code": code,
+                    "name": name,
+                    "credits": random.choice([2.0, 2.5, 3.0, 3.5]),
+                    "department": dept,
+                    "course_type": random.choice(course_type_pool),
+                }
+            )
+            existing_codes.add(code)
+            seq += 1
+
         for row in course_rows:
             Course.objects.get_or_create(code=row["code"], defaults=row)
 
@@ -251,6 +299,19 @@ class Command(BaseCommand):
             prereq = course_lookup.get(prereq_code)
             if course and prereq:
                 CoursePrerequisite.objects.get_or_create(course=course, prerequisite=prereq, defaults={"min_grade": min_grade})
+
+        # 为新增课程补充部分先修课，使数据更贴近真实场景
+        generated_courses = [c for code, c in course_lookup.items() if code.startswith("CSE5") or code.startswith("EE5") or code.startswith("BUS5") or code.startswith("MATH5")]
+        fallback_prereqs = {
+            "CSE": course_lookup.get("CSE200"),
+            "EE": course_lookup.get("EE170"),
+            "BUS": course_lookup.get("BUS110"),
+            "MATH": course_lookup.get("MATH120"),
+        }
+        for course in generated_courses[:40]:
+            prereq = fallback_prereqs.get(course.department.code)
+            if prereq and course != prereq:
+                CoursePrerequisite.objects.get_or_create(course=course, prerequisite=prereq, defaults={"min_grade": "C"})
 
         section_specs = [
             ("CSE100", fall, 1, instructor_profiles.get("carol"), 120),
@@ -285,12 +346,35 @@ class Command(BaseCommand):
             )
             created_sections.append(section)
 
+        # 为新增课程批量生成教学班，覆盖春秋两个学期
+        all_instructors = list(InstructorProfile.objects.select_related("department"))
+        extra_courses = [course for course in Course.objects.all() if course.code not in [row[0] for row in section_specs]]
+        for idx, course in enumerate(extra_courses, start=1):
+            instructor = all_instructors[idx % len(all_instructors)] if all_instructors else None
+            if not instructor:
+                break
+            semester = fall if idx % 2 else spring
+            section, _ = CourseSection.objects.get_or_create(
+                course=course,
+                semester=semester,
+                section_number=None,
+                defaults={"instructor": instructor, "capacity": 60 + (idx % 3) * 10},
+            )
+            created_sections.append(section)
+
+        slot_tracker: dict[int, int] = defaultdict(int)
         for idx, section in enumerate(created_sections, start=1):
+            instructor_key = section.instructor_id or 0
+            slot_index = slot_tracker[instructor_key]
+            day_of_week = (slot_index % 5) + 1
+            start_hour = 8 + ((slot_index // 5) % 4) * 2
+            end_hour = start_hour + 1
+            slot_tracker[instructor_key] += 1
             MeetingTime.objects.get_or_create(
                 section=section,
-                day_of_week=((idx % 5) + 1),
-                start_time=datetime.time(8 + (idx % 3) * 2, 0),
-                end_time=datetime.time(9 + (idx % 3) * 2, 50),
+                day_of_week=day_of_week,
+                start_time=datetime.time(start_hour, 0),
+                end_time=datetime.time(end_hour, 50),
                 defaults={"location": f"A{100 + idx}"},
             )
 
@@ -307,35 +391,24 @@ class Command(BaseCommand):
                 return 1.0
             return 0.0
 
-        status_pattern = [("passed", 95), ("passed", 85), ("failed", 55), ("enrolling", None), ("passed", 72)]
-        sections_for_enroll = created_sections[:10]
-        if not sections_for_enroll:
+        status_pattern = [("passed", 95), ("passed", 85), ("failed", 55), ("enrolling", None), ("passed", 72), ("failed", 48)]
+        sections_for_enroll = created_sections[: min(40, len(created_sections))]
+        if len(sections_for_enroll) < 3:
             self.stdout.write(self.style.ERROR("No sections were created; cannot seed enrollments."))
             return
-        for idx, student in enumerate(student_profiles[:100]):
-            primary_section = sections_for_enroll[idx % len(sections_for_enroll)]
-            status, grade = status_pattern[idx % len(status_pattern)]
-            Enrollment.objects.update_or_create(
-                student=student,
-                section=primary_section,
-                defaults={
-                    "status": status,
-                    "final_grade": grade,
-                    "grade_points": calc_points(grade),
-                },
-            )
-
-            secondary_section = sections_for_enroll[(idx + 3) % len(sections_for_enroll)]
-            sec_status, sec_grade = status_pattern[(idx + 2) % len(status_pattern)]
-            Enrollment.objects.update_or_create(
-                student=student,
-                section=secondary_section,
-                defaults={
-                    "status": sec_status,
-                    "final_grade": sec_grade,
-                    "grade_points": calc_points(sec_grade),
-                },
-            )
+        for idx, student in enumerate(student_profiles):
+            chosen_sections = random.sample(sections_for_enroll, k=3)
+            for offset, section in enumerate(chosen_sections):
+                status, grade = status_pattern[(idx + offset) % len(status_pattern)]
+                Enrollment.objects.update_or_create(
+                    student=student,
+                    section=section,
+                    defaults={
+                        "status": status,
+                        "final_grade": grade,
+                        "grade_points": calc_points(grade),
+                    },
+                )
 
         cse_plan_defaults = {
             "total_credits": 140,
