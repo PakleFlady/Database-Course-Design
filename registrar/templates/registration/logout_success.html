@@ -9,7 +9,7 @@
   <p class="muted">提示：教师入口为“教师登录”，退出后可立刻切换账号。</p>
 {% endif %}
 <div class="actions" style="margin-top:16px; gap:10px;">
-  <a class="button primary" href="{{ login_portal_url|default:request.path }}">返回登录入口</a>
+  <a class="button primary" href="{{ login_portal_url|default:'/accounts/login/' }}">重新登录</a>
   <a class="button secondary" href="{% url 'student_login' %}">学生登录</a>
   <a class="button secondary" href="{% url 'instructor_login' %}">教师登录</a>
 </div>
