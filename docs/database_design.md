@@ -1,129 +1,66 @@
 # University Course Registration and Grade Management Database Design
 
-This document describes the schema, constraints, and operational guidelines for the University Course Registration and Grade Management Database System. The design targets a relational database such as PostgreSQL, MySQL, or SQL Server, using only ANSI SQL features when possible. A Django reference implementation that mirrors these entities lives in `registrar/` with seed data via `python manage.py bootstrap_demo` and a ready-to-use admin UI.
+This document aligns the Django models, the ANSI SQL DDL, and the CLI demo schema so the database meets the course requirements (唯一学号、容量、时间冲突、先修校验、学分上下限、成绩与绩点统计等)。
 
 ## Goals
-- Centralize data for students, instructors, courses, sections, enrollments, prerequisites, and grades.
-- Enforce core business rules in the schema through keys, checks, and reference tables.
-- Support common workflows: registration, prerequisite validation, conflict detection, grade entry, GPA calculation, and transcript generation.
-- Provide artifacts (DDL, seed data, and sample queries) to accelerate deployment and testing.
+- 以“主键 + 唯一约束”锁定核心实体（学生学号、课程代码、教学班组合、先修组合、账号），杜绝重复记录。
+- 在表结构层面落实业务规则：容量非负、学分正数、开课时间顺序、选课唯一、状态枚举、教师排课冲突校验入口等。
+- 提供可以直接执行的 DDL/示例数据/查询脚本，便于测试时间冲突、先修未满足、超学分/低学分、重修审批、成绩与绩点统计。
+- 让 Django 模型、`sql/schema.sql` 与 `app.py` 的 SQLite 演示库保持字段/约束一致，确保文档、代码和数据同源。
 
 ## Entity-Relationship Overview
 ```mermaid
 erDiagram
-    Colleges ||--o{ Departments : has
-    Departments ||--o{ Majors : offers
-    Departments ||--o{ Instructors : employs
-    Departments ||--o{ Courses : offers
-    Majors ||--o{ Students : enrolls
-    Students ||--o{ Enrollments : create
-    Courses ||--o{ CourseSections : contains
-    Semesters ||--o{ CourseSections : schedules
-    Instructors ||--o{ CourseSections : teaches
-    CourseSections ||--|{ SectionMeetings : includes
-    Courses ||--o{ CoursePrerequisites : requires
-    CourseSections ||--o{ EnrollmentOverrides : mayApprove
-    Enrollments ||--o{ Grades : stores
+    User ||--|| UserSecurity : has
+    User ||--o{ StudentProfile : owns
+    User ||--o{ InstructorProfile : owns
+    Department ||--o{ ClassGroup : organizes
+    Department ||--o{ ProgramPlan : defines
+    ProgramPlan ||--o{ ProgramRequirement : contains
+    ProgramRequirement ||--o{ ProgramRequirementCourse : maps
+    Department ||--o{ Course : offers
+    Semester ||--o{ CourseSection : schedules
+    InstructorProfile ||--o{ CourseSection : teaches
+    Course ||--o{ CourseSection : sections
+    CourseSection ||--o{ MeetingTime : meets
+    Course ||--o{ CoursePrerequisite : requires
+    StudentProfile ||--o{ Enrollment : registers
+    CourseSection ||--o{ Enrollment : holds
+    Enrollment ||--o{ EnrollmentOverride : mayOverride
+    StudentProfile ||--o{ StudentRequest : submits
+    CourseSection ||--o{ StudentRequest : concerns
+    StudentRequest ||--o{ ApprovalLog : audited
+    Enrollment ||--|| Grade : records
 ```
 
-## Table Specifications
+## Schema snapshot (primary keys & unique keys)
+- **UserSecurity**: PK `user_security_id`; one-to-one `user_id` unique (记录首次登录需改密标志)。
+- **Department**: PK `department_id`; `code`（Django）与 `numeric_code`（自动分配）唯一；SQL 侧 `UNIQUE(college_id, name)` 避免同学院重名。
+- **ClassGroup**: PK `class_group_id`; `UNIQUE(department_id, name)` 确保班级命名唯一。
+- **StudentProfile / students**: PK 自增 ID；`student_number` **非空唯一**，保存/迁移时自动生成 `<year><dept_numeric><seq>`（部门缺失则回退为 `000` 前缀）；`user_id` 一对一；院系/班级外键保护归属。
+- **InstructorProfile / instructors**: PK；`user_id` 唯一；院系外键 PROTECT，防止教师自行更换院系。
+- **Course**: PK；`course_code` 唯一；`course_type` 枚举（foundational_required/general_elective/major_required/major_elective/practical/lab）。
+- **ProgramPlan / ProgramRequirement / ProgramRequirementCourse**: PK；`program_requirement_courses` 以 (requirement_id, course_id) 复合主键覆盖培养方案与课程关联。
+- **Semester**: PK；`code` 唯一；起止日期检查 start < end。
+- **CourseSection**: PK；`UNIQUE(course_id, semester_id, section_code)` 保证同学期同课程不重复；`capacity`/`waitlist_capacity` 非负；`grades_locked` 控制成绩锁定。
+- **MeetingTime**: PK；检查 end_time > start_time；在应用层用 `MeetingTime.clean` 防止教师同一时段重复排课。
+- **CoursePrerequisite**: 复合 PK (course_id, prereq_course_id)；最小成绩枚举。
+- **Enrollment**: PK；`UNIQUE(student_id, section_id)` 防止重复选课；状态仅允许 enrolling/dropped/passed/failed；存储最终分数与绩点；与 `EnrollmentOverride` 关联记录容量/先修/时间冲突/重修豁免。
+- **Grade**: PK；`enrollment_id` 唯一，保证一条选课仅一条最终成绩记录（CLI/SQL 演示库使用）。
+- **StudentRequest & ApprovalLog**: 记录重修/跨院/超学分等审批及审核轨迹。
 
-### Reference Tables
-- **colleges**: `college_id` (PK), `name`, `dean`, `contact_email`.
-- **departments**: `department_id` (PK), `college_id` (FK), `name`, `office_location`, `contact_email`.
-- **majors**: `major_id` (PK), `department_id` (FK), `name`, `degree_level`, `required_credits`.
-- **semesters**: `semester_id` (PK), `code` (e.g., `2025FALL`), `name`, `start_date`, `end_date`, `add_deadline`, `drop_deadline`.
-- **users**: `user_id` (PK), `username`, `password_hash`, `role` (`student` | `instructor` | `admin`), `created_at`, `status` (pending/approved/disabled). Students and instructors link back to this table to unify authentication.
+## Requirement coverage checklist
+1. **唯一学号**：`student_number` 非空唯一并自动生成；迁移脚本会为历史数据补齐。【F:registrar/models.py†L194-L259】【F:registrar/migrations/0012_alter_studentprofile_student_number.py†L1-L55】
+2. **课程与教学班容量**：`capacity`/`waitlist_capacity` CHECK 约束；`grades_locked` 防止锁定后修改成绩。【F:sql/schema.sql†L137-L153】
+3. **教师不可同时间授课**：`MeetingTime.clean` 检查同教师时间重叠；SQL/CLI 通过 `section_meetings` 数据支持冲突检测。【F:registrar/models.py†L297-L344】【F:sql/queries.sql†L68-L74】
+4. **选课记录与成绩/绩点**：Enrollment 存储 `final_grade` 与 `grade_points`，查询脚本计算绩点、课程通过/需重修标记。【F:sql/schema.sql†L174-L197】【F:sql/queries.sql†L1-L35】
+5. **先修课**：`course_prerequisites` 复合主键；查询 3 校验先修成绩是否达标。【F:sql/schema.sql†L166-L172】【F:sql/queries.sql†L42-L57】
+6. **学生所修课程/需重修标识**：查询 2 提供课程列表与 `needs_retake` 结果；成绩低于 2.0 或状态 failed 会标记。【F:sql/queries.sql†L27-L35】
+7. **时间冲突/学分上下限**：查询 4、5 对应 10–40 学分检查与课表冲突；CLI 同步实现 `credit-load`、`conflict` 命令。【F:sql/queries.sql†L59-L74】【F:app.py†L439-L505】
+8. **重修/跨院审批**：`student_requests`/`approval_logs` 记录申请与审批动作；`EnrollmentOverride` 用于容量/先修/时间冲突豁免。【F:sql/schema.sql†L199-L232】
 
-### Core Entities
-- **students**: `student_id` (PK), `user_id` (FK), `major_id` (FK), `college_id` (FK), `full_name`, `gender`, `date_of_birth`, `email`, `phone`, `address`, `enrollment_year`, `expected_graduation_year`, `gpa_cache` (optional denormalization).
-- **instructors**: `instructor_id` (PK), `user_id` (FK), `department_id` (FK), `full_name`, `title`, `email`, `phone`, `office`, `status` (active/on_leave/retired). Department is immutable except via admin changes.
-- **courses**: `course_id` (PK), `department_id` (FK), `course_code`, `name`, `credits`, `course_type` (general_required, major_required, major_elective, university_elective, practical), `description`, `repeatable` (boolean), `active`.
-- **course_sections**: `section_id` (PK), `course_id` (FK), `semester_id` (FK), `instructor_id` (FK), `section_code` (e.g., `A01`), `capacity`, `waitlist_capacity`, `location_note`, `status` (planned/open/closed/cancelled), `language`, `grading_scheme` (numeric/letter/pass_fail), `created_at`.
-- **section_meetings**: `meeting_id` (PK), `section_id` (FK), `day_of_week` (1=Mon), `start_time`, `end_time`, `room`, `building`. Time conflicts are detected on this table for both students and instructors.
-- **course_prerequisites**: `course_id` (FK), `prereq_course_id` (FK), `min_grade` (letter or numeric threshold), `all_of` flag to support composite prerequisite logic. Composite logic can be implemented with AND over rows and an optional grouping field for OR branches.
-- **enrollments**: `enrollment_id` (PK), `student_id` (FK), `section_id` (FK), `status` (enrolling, dropped, completed, failed, passed, retake_pending), `requested_at`, `approved_at`, `dropped_at`, `grade_mode` (normal/audit), unique constraint on (student_id, section_id).
-- **grades**: `grade_id` (PK), `enrollment_id` (FK, unique), `numeric_grade`, `letter_grade`, `grade_points`, `recorded_at`, `recorded_by` (FK to `instructors`), `is_final`.
-- **enrollment_overrides**: `override_id` (PK), `enrollment_id` (FK), `override_type` (capacity, prerequisite, time_conflict, retake), `approved_by` (FK to admins), `approved_at`, `reason`.
-
-### Integrity Rules and Checks
-- Unique IDs for students, instructors, courses, and users via primary keys.
-- `enrollments.student_id` references `students` and cannot be duplicated per section.
-- `course_sections.capacity` and `waitlist_capacity` must be non-negative; check constraints enforce `capacity >= 0`, `waitlist_capacity >= 0`.
-- Instructor scheduling conflict prevention uses a constraint that no two `section_meetings` share the same instructor/time; enforced at application layer with the provided queries.
-- Enrollment conflict prevention uses a similar time-overlap query between `section_meetings` joined to the student's current sections.
-- Prerequisite validation uses `course_prerequisites` joined with historical `grades` where `grade_points` meet `min_grade` thresholds; failures block enrollment unless an override exists.
-
-## Key Workflows
-
-### Student Registration and Profile Maintenance
-1. Admin approves `users` row with role `student`; creates `students` row referencing `majors` and `colleges`.
-2. Students update contact info in `students` table fields such as `email`, `phone`, `address`.
-
-### Course Scheduling and Enrollment
-1. Admins create `courses`, `semesters`, and `course_sections`; add meeting times in `section_meetings` and capacities on `course_sections`.
-2. Students submit enrollment requests. The application executes:
-   - **Prerequisite check**: ensure required rows in `course_prerequisites` have passing grades on prior `courses`.
-   - **Time conflict check**: compare requested section's `section_meetings` with existing enrolled sections for the same student.
-   - **Credit load check**: sum planned credits for the student in the semester; reject outside 10–40 credit bounds.
-   - **Capacity check**: ensure `enrollments` count below `capacity`;否则需要管理员干预或调整容量。
-3. Admins may approve overrides in `enrollment_overrides`, e.g., retake permission for previously passed courses.
-
-### Grading and GPA Calculation
-1. Instructors record `grades` rows tied to their sections; `grades.grade_points` map to letter grades via policy (see sample mapping below).
-2. Final grades update enrollment status to `passed` or `failed`.
-3. GPA is computed as the weighted sum of `grade_points * course_credits` divided by total attempted credits; a cached GPA field on `students` can be refreshed via scheduled job.
-
-#### Sample Grade Mapping
-| Letter | Points |
-| --- | --- |
-| A | 4.0 |
-| A- | 3.7 |
-| B+ | 3.3 |
-| B | 3.0 |
-| B- | 2.7 |
-| C+ | 2.3 |
-| C | 2.0 |
-| D | 1.0 |
-| F | 0.0 |
-
-## Indexing Strategy
-- `courses(course_code)` unique index for fast lookup by catalog code.
-- `course_sections(course_id, semester_id)` composite index for semester-based retrieval.
-- `enrollments(student_id, section_id)` unique index to prevent duplicates and enable fast conflict detection.
-- `section_meetings(section_id, day_of_week, start_time)` index to accelerate overlap checks.
-- `grades(enrollment_id)` unique index because an enrollment has at most one final grade.
-- `course_prerequisites(course_id, prereq_course_id)` composite PK for quick prerequisite verification.
-
-## Security and Roles
-- Use database roles mapped to application roles (student, instructor, admin) with least privilege.
-- Implement row-level security policies where supported to restrict students to their own `enrollments` and `grades`.
-- Store `password_hash` using strong algorithms (bcrypt/argon2) in `users`; never store plaintext.
-
-## Transactions and Concurrency
-- Wrap enrollment steps in transactions to ensure atomic conflict, capacity, and prerequisite checks.
-- Use `SELECT ... FOR UPDATE` on `course_sections` when incrementing seat counts to avoid overbooking.
-- When two students attempt the final seat, rely on transaction isolation (repeatable read/serializable) or optimistic retry logic.
-
-## Data Quality and Auditing
-- Timestamps (`created_at`, `recorded_at`, `approved_at`) track important mutations.
-- Use `status` enums instead of free text to standardize workflow states.
-- Add audit triggers to log grade changes to a `grade_audit` table when supported.
-
-## Reporting and Exports
-- Transcript export uses the transcript query in `sql/queries.sql` to pull completed courses, grades, and GPA.
-- GPA distribution and pass-rate reports aggregate `grades` joined to `course_sections` by semester and course.
-- Curriculum lookup filters `courses` by `course_type` and joins `majors` for required credit totals.
-
-## Test Data Strategy
-- Seed data in `sql/sample_data.sql` covers:
-  - Normal enrollments, prerequisite failures, retake requests, and time conflicts.
-  - Instructors with overlapping meeting times to test instructor conflict logic.
-  - Mixed grade outcomes (pass/fail) for GPA calculations and prerequisite validation.
-
-## Extension Ideas
-- Add `buildings` and `rooms` tables with capacities for room scheduling.
-- 自动化容量监控与调班：满额时提醒管理员调整容量或开设新班级。
-- Provide REST or GraphQL endpoints for integration with a front-end or administrative portal.
-- Add messaging/notification tables for enrollment approvals or prerequisite denials.
-
+## Artifacts
+- **DDL**: `sql/schema.sql`（PostgreSQL 友好）与 `app.py::SCHEMA_SQL`（SQLite 演示）同步维护主键、唯一与检查约束。
+- **示例数据**: `sql/sample_data.sql` 和 `app.py::SAMPLE_DATA_SQL` 覆盖基础院系、培养方案、先修课、时间冲突样例、重修/超学分审批等场景。
+- **查询脚本**: `sql/queries.sql` 包含成绩单/GPA、先修校验、学分区间、时间冲突、容量、通过率与 GPA 分布统计，可直接用于实验和验收。
+- **Django 约束**: 详见 `registrar/models.py` —— 一对一账号绑定、唯一教学班组合、时间冲突校验、成绩锁定与审批记录等与 DDL 对齐。

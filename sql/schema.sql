@@ -17,6 +17,13 @@ CREATE TABLE departments (
     UNIQUE (college_id, name)
 );
 
+CREATE TABLE class_groups (
+    class_group_id  SERIAL PRIMARY KEY,
+    department_id   INTEGER NOT NULL REFERENCES departments(department_id),
+    name            VARCHAR(100) NOT NULL,
+    UNIQUE (department_id, name)
+);
+
 CREATE TABLE majors (
     major_id        SERIAL PRIMARY KEY,
     department_id   INTEGER NOT NULL REFERENCES departments(department_id),
@@ -46,11 +53,22 @@ CREATE TABLE users (
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE user_security (
+    user_security_id    SERIAL PRIMARY KEY,
+    user_id             INTEGER NOT NULL UNIQUE REFERENCES users(user_id),
+    must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE students (
     student_id      SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL UNIQUE REFERENCES users(user_id),
+    student_number  VARCHAR(32) NOT NULL UNIQUE,
     major_id        INTEGER NOT NULL REFERENCES majors(major_id),
     college_id      INTEGER NOT NULL REFERENCES colleges(college_id),
+    department_id   INTEGER REFERENCES departments(department_id),
+    class_group_id  INTEGER REFERENCES class_groups(class_group_id),
     full_name       VARCHAR(255) NOT NULL,
     gender          VARCHAR(20),
     date_of_birth   DATE,
@@ -80,10 +98,40 @@ CREATE TABLE courses (
     course_code     VARCHAR(50) NOT NULL UNIQUE,
     name            VARCHAR(255) NOT NULL,
     credits         NUMERIC(3,1) NOT NULL CHECK (credits > 0),
-    course_type     VARCHAR(40) NOT NULL CHECK (course_type IN ('general_required', 'major_required', 'major_elective', 'university_elective', 'practical')),
+    course_type     VARCHAR(40) NOT NULL CHECK (course_type IN ('foundational_required', 'general_elective', 'major_required', 'major_elective', 'practical', 'lab')),
     description     TEXT,
     repeatable      BOOLEAN NOT NULL DEFAULT FALSE,
     active          BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE program_plans (
+    plan_id         SERIAL PRIMARY KEY,
+    department_id   INTEGER NOT NULL REFERENCES departments(department_id),
+    major           VARCHAR(255) NOT NULL,
+    academic_year   VARCHAR(20) NOT NULL,
+    enrollment_start DATE,
+    enrollment_end   DATE,
+    total_credits    NUMERIC(5,1),
+    is_active        BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE program_requirements (
+    requirement_id  SERIAL PRIMARY KEY,
+    plan_id         INTEGER NOT NULL REFERENCES program_plans(plan_id),
+    category        VARCHAR(50) NOT NULL CHECK (category IN ('foundational_required', 'general_elective', 'major_required', 'major_elective', 'practical', 'lab')),
+    required_credits NUMERIC(4,1) NOT NULL,
+    recommended_term VARCHAR(50),
+    selection_start DATE,
+    selection_end   DATE,
+    notes           TEXT
+);
+
+CREATE TABLE program_requirement_courses (
+    requirement_id  INTEGER NOT NULL REFERENCES program_requirements(requirement_id),
+    course_id       INTEGER NOT NULL REFERENCES courses(course_id),
+    PRIMARY KEY (requirement_id, course_id)
 );
 
 CREATE TABLE course_sections (
@@ -94,10 +142,12 @@ CREATE TABLE course_sections (
     section_code    VARCHAR(20) NOT NULL,
     capacity        INTEGER NOT NULL CHECK (capacity >= 0),
     waitlist_capacity INTEGER NOT NULL DEFAULT 0 CHECK (waitlist_capacity >= 0),
+    grades_locked   BOOLEAN NOT NULL DEFAULT FALSE,
     location_note   VARCHAR(255),
     status          VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (status IN ('planned', 'open', 'closed', 'cancelled')),
     language        VARCHAR(30) DEFAULT 'English',
     grading_scheme  VARCHAR(20) NOT NULL DEFAULT 'numeric' CHECK (grading_scheme IN ('numeric', 'letter', 'pass_fail')),
+    notes           TEXT,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (course_id, semester_id, section_code)
 );
@@ -125,7 +175,9 @@ CREATE TABLE enrollments (
     enrollment_id   SERIAL PRIMARY KEY,
     student_id      INTEGER NOT NULL REFERENCES students(student_id),
     section_id      INTEGER NOT NULL REFERENCES course_sections(section_id),
-    status          VARCHAR(20) NOT NULL DEFAULT 'enrolling' CHECK (status IN ('enrolling', 'dropped', 'completed', 'failed', 'passed', 'retake_pending')),
+    status          VARCHAR(20) NOT NULL DEFAULT 'enrolling' CHECK (status IN ('enrolling', 'dropped', 'passed', 'failed')),
+    final_grade     NUMERIC(5,2),
+    grade_points    NUMERIC(4,2),
     requested_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_at     TIMESTAMP,
     dropped_at      TIMESTAMP,
@@ -144,6 +196,29 @@ CREATE TABLE grades (
     is_final        BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+CREATE TABLE student_requests (
+    request_id      SERIAL PRIMARY KEY,
+    student_id      INTEGER NOT NULL REFERENCES students(student_id),
+    section_id      INTEGER REFERENCES course_sections(section_id),
+    request_type    VARCHAR(32) NOT NULL CHECK (request_type IN ('enroll', 'drop', 'retake', 'cross_college', 'credit_overload')),
+    reason          TEXT,
+    status          VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    reviewed_by     INTEGER REFERENCES users(user_id),
+    reviewed_at     TIMESTAMP,
+    metadata        JSON,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE approval_logs (
+    approval_log_id SERIAL PRIMARY KEY,
+    request_id      INTEGER NOT NULL REFERENCES student_requests(request_id),
+    action          VARCHAR(16) NOT NULL CHECK (action IN ('approved', 'rejected')),
+    actor           INTEGER REFERENCES users(user_id),
+    note            TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE enrollment_overrides (
     override_id     SERIAL PRIMARY KEY,
     enrollment_id   INTEGER NOT NULL REFERENCES enrollments(enrollment_id),
@@ -154,9 +229,12 @@ CREATE TABLE enrollment_overrides (
 );
 
 -- Indexes for performance
+CREATE INDEX idx_students_number ON students(student_number);
 CREATE INDEX idx_course_sections_course_semester ON course_sections(course_id, semester_id);
 CREATE INDEX idx_section_meetings_section_day ON section_meetings(section_id, day_of_week, start_time);
 CREATE INDEX idx_enrollments_student_section ON enrollments(student_id, section_id);
 CREATE INDEX idx_enrollments_section ON enrollments(section_id);
 CREATE INDEX idx_grades_enrollment ON grades(enrollment_id);
 CREATE INDEX idx_course_prereq_course ON course_prerequisites(course_id);
+CREATE INDEX idx_student_requests_student ON student_requests(student_id);
+CREATE INDEX idx_program_requirements_plan ON program_requirements(plan_id, category);

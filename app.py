@@ -32,6 +32,13 @@ CREATE TABLE IF NOT EXISTS departments (
     UNIQUE (college_id, name)
 );
 
+CREATE TABLE IF NOT EXISTS class_groups (
+    class_group_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    department_id   INTEGER NOT NULL REFERENCES departments(department_id),
+    name            TEXT NOT NULL,
+    UNIQUE (department_id, name)
+);
+
 CREATE TABLE IF NOT EXISTS majors (
     major_id        INTEGER PRIMARY KEY AUTOINCREMENT,
     department_id   INTEGER NOT NULL REFERENCES departments(department_id),
@@ -61,11 +68,22 @@ CREATE TABLE IF NOT EXISTS users (
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS user_security (
+    user_security_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id             INTEGER NOT NULL UNIQUE REFERENCES users(user_id),
+    must_change_password INTEGER NOT NULL DEFAULT 1,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS students (
     student_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id         INTEGER NOT NULL UNIQUE REFERENCES users(user_id),
+    student_number  TEXT NOT NULL UNIQUE,
     major_id        INTEGER NOT NULL REFERENCES majors(major_id),
     college_id      INTEGER NOT NULL REFERENCES colleges(college_id),
+    department_id   INTEGER REFERENCES departments(department_id),
+    class_group_id  INTEGER REFERENCES class_groups(class_group_id),
     full_name       TEXT NOT NULL,
     gender          TEXT,
     date_of_birth   TEXT,
@@ -95,10 +113,40 @@ CREATE TABLE IF NOT EXISTS courses (
     course_code     TEXT NOT NULL UNIQUE,
     name            TEXT NOT NULL,
     credits         REAL NOT NULL CHECK (credits > 0),
-    course_type     TEXT NOT NULL CHECK (course_type IN ('general_required', 'major_required', 'major_elective', 'university_elective', 'practical')),
+    course_type     TEXT NOT NULL CHECK (course_type IN ('foundational_required', 'general_elective', 'major_required', 'major_elective', 'practical', 'lab')),
     description     TEXT,
     repeatable      INTEGER NOT NULL DEFAULT 0,
     active          INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS program_plans (
+    plan_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    department_id   INTEGER NOT NULL REFERENCES departments(department_id),
+    major           TEXT NOT NULL,
+    academic_year   TEXT NOT NULL,
+    enrollment_start TEXT,
+    enrollment_end   TEXT,
+    total_credits    REAL,
+    is_active        INTEGER NOT NULL DEFAULT 1,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS program_requirements (
+    requirement_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id         INTEGER NOT NULL REFERENCES program_plans(plan_id),
+    category        TEXT NOT NULL CHECK (category IN ('foundational_required', 'general_elective', 'major_required', 'major_elective', 'practical', 'lab')),
+    required_credits REAL NOT NULL,
+    recommended_term TEXT,
+    selection_start TEXT,
+    selection_end   TEXT,
+    notes           TEXT
+);
+
+CREATE TABLE IF NOT EXISTS program_requirement_courses (
+    requirement_id  INTEGER NOT NULL REFERENCES program_requirements(requirement_id),
+    course_id       INTEGER NOT NULL REFERENCES courses(course_id),
+    PRIMARY KEY (requirement_id, course_id)
 );
 
 CREATE TABLE IF NOT EXISTS course_sections (
@@ -109,10 +157,12 @@ CREATE TABLE IF NOT EXISTS course_sections (
     section_code    TEXT NOT NULL,
     capacity        INTEGER NOT NULL CHECK (capacity >= 0),
     waitlist_capacity INTEGER NOT NULL DEFAULT 0 CHECK (waitlist_capacity >= 0),
+    grades_locked   INTEGER NOT NULL DEFAULT 0,
     location_note   TEXT,
     status          TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('planned', 'open', 'closed', 'cancelled')),
     language        TEXT DEFAULT 'English',
     grading_scheme  TEXT NOT NULL DEFAULT 'numeric' CHECK (grading_scheme IN ('numeric', 'letter', 'pass_fail')),
+    notes           TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (course_id, semester_id, section_code)
 );
@@ -140,7 +190,9 @@ CREATE TABLE IF NOT EXISTS enrollments (
     enrollment_id   INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id      INTEGER NOT NULL REFERENCES students(student_id),
     section_id      INTEGER NOT NULL REFERENCES course_sections(section_id),
-    status          TEXT NOT NULL DEFAULT 'enrolling' CHECK (status IN ('enrolling', 'dropped', 'completed', 'failed', 'passed', 'retake_pending')),
+    status          TEXT NOT NULL DEFAULT 'enrolling' CHECK (status IN ('enrolling', 'dropped', 'passed', 'failed')),
+    final_grade     REAL,
+    grade_points    REAL,
     requested_at    TEXT NOT NULL DEFAULT (datetime('now')),
     approved_at     TEXT,
     dropped_at      TEXT,
@@ -159,6 +211,29 @@ CREATE TABLE IF NOT EXISTS grades (
     is_final        INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS student_requests (
+    request_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id      INTEGER NOT NULL REFERENCES students(student_id),
+    section_id      INTEGER REFERENCES course_sections(section_id),
+    request_type    TEXT NOT NULL CHECK (request_type IN ('enroll', 'drop', 'retake', 'cross_college', 'credit_overload')),
+    reason          TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    reviewed_by     INTEGER REFERENCES users(user_id),
+    reviewed_at     TEXT,
+    metadata        TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS approval_logs (
+    approval_log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id      INTEGER NOT NULL REFERENCES student_requests(request_id),
+    action          TEXT NOT NULL CHECK (action IN ('approved', 'rejected')),
+    actor           INTEGER REFERENCES users(user_id),
+    note            TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS enrollment_overrides (
     override_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     enrollment_id   INTEGER NOT NULL REFERENCES enrollments(enrollment_id),
@@ -168,12 +243,15 @@ CREATE TABLE IF NOT EXISTS enrollment_overrides (
     reason          TEXT
 );
 
+CREATE INDEX IF NOT EXISTS idx_students_number ON students(student_number);
 CREATE INDEX IF NOT EXISTS idx_course_sections_course_semester ON course_sections(course_id, semester_id);
 CREATE INDEX IF NOT EXISTS idx_section_meetings_section_day ON section_meetings(section_id, day_of_week, start_time);
 CREATE INDEX IF NOT EXISTS idx_enrollments_student_section ON enrollments(student_id, section_id);
 CREATE INDEX IF NOT EXISTS idx_enrollments_section ON enrollments(section_id);
 CREATE INDEX IF NOT EXISTS idx_grades_enrollment ON grades(enrollment_id);
 CREATE INDEX IF NOT EXISTS idx_course_prereq_course ON course_prerequisites(course_id);
+CREATE INDEX IF NOT EXISTS idx_student_requests_student ON student_requests(student_id);
+CREATE INDEX IF NOT EXISTS idx_program_requirements_plan ON program_requirements(plan_id, category);
 """
 
 SAMPLE_DATA_SQL = """
@@ -184,6 +262,9 @@ INSERT INTO colleges (college_id, name, dean, contact_email) VALUES
 INSERT INTO departments (department_id, college_id, name, office_location, contact_email) VALUES
  (1, 1, 'Computer Science and Engineering', 'ENG-201', 'cse@example.edu'),
  (2, 1, 'Electrical Engineering', 'ENG-310', 'ee@example.edu');
+
+INSERT INTO class_groups (class_group_id, department_id, name) VALUES
+ (1, 1, 'CS2301');
 
 INSERT INTO majors (major_id, department_id, name, degree_level, required_credits) VALUES
  (1, 1, 'Software Engineering', 'bachelor', 140),
@@ -200,10 +281,10 @@ INSERT INTO users (user_id, username, password_hash, role, status) VALUES
  (4, 'dave', 'hash4', 'instructor', 'approved'),
  (5, 'admin', 'hash5', 'admin', 'approved');
 
-INSERT INTO students (student_id, user_id, major_id, college_id, full_name, gender, date_of_birth, email, phone, address, enrollment_year, expected_graduation_year)
+INSERT INTO students (student_id, user_id, student_number, major_id, college_id, department_id, class_group_id, full_name, gender, date_of_birth, email, phone, address, enrollment_year, expected_graduation_year)
 VALUES
- (1, 1, 1, 1, 'Alice Zhang', 'F', '2004-06-01', 'alice@example.edu', '555-0001', 'Dorm 1', 2023, 2027),
- (2, 2, 2, 1, 'Bob Li', 'M', '2003-08-12', 'bob@example.edu', '555-0002', 'Dorm 2', 2022, 2026);
+ (1, 1, '2025001001', 1, 1, 1, 1, 'Alice Zhang', 'F', '2004-06-01', 'alice@example.edu', '555-0001', 'Dorm 1', 2023, 2027),
+ (2, 2, '2025001002', 2, 1, 1, 1, 'Bob Li', 'M', '2003-08-12', 'bob@example.edu', '555-0002', 'Dorm 2', 2022, 2026);
 
 INSERT INTO instructors (instructor_id, user_id, department_id, full_name, title, email, phone, office)
 VALUES
@@ -211,12 +292,12 @@ VALUES
  (2, 4, 1, 'Dave Chen', 'Associate Professor', 'dave@example.edu', '555-1002', 'ENG-420');
 
 INSERT INTO courses (course_id, department_id, course_code, name, credits, course_type, description) VALUES
- (1, 1, 'CSE100', 'Introduction to Programming', 3.0, 'general_required', 'Fundamentals of programming'),
+ (1, 1, 'CSE100', 'Introduction to Programming', 3.0, 'foundational_required', 'Fundamentals of programming'),
  (2, 1, 'CSE200', 'Data Structures', 3.0, 'major_required', 'Core data structures'),
  (3, 1, 'CSE210', 'Discrete Mathematics', 3.0, 'major_required', 'Logic and combinatorics'),
  (4, 1, 'CSE300', 'Algorithms', 3.0, 'major_required', 'Algorithm design'),
  (5, 1, 'CSE350', 'Operating Systems', 3.0, 'major_required', 'OS concepts'),
- (6, 1, 'CSE360', 'Database Systems', 3.0, 'major_required', 'Relational databases');
+ (6, 1, 'CSE360', 'Database Systems', 3.0, 'lab', 'Relational databases and labs');
 
 INSERT INTO course_prerequisites (course_id, prereq_course_id, min_grade, all_of) VALUES
  (2, 1, 'C', 1),
@@ -224,12 +305,23 @@ INSERT INTO course_prerequisites (course_id, prereq_course_id, min_grade, all_of
  (5, 2, 'C', 1),
  (6, 2, 'C', 1);
 
-INSERT INTO course_sections (section_id, course_id, semester_id, instructor_id, section_code, capacity, waitlist_capacity, location_note)
+INSERT INTO program_plans (plan_id, department_id, major, academic_year, enrollment_start, enrollment_end, total_credits, is_active) VALUES
+ (1, 1, 'Software Engineering', '2025', '2025-08-01', '2025-09-15', 140.0, 1);
+
+INSERT INTO program_requirements (requirement_id, plan_id, category, required_credits, recommended_term, selection_start, selection_end, notes) VALUES
+ (1, 1, 'foundational_required', 30.0, 'Year 1', '2025-08-01', '2025-09-15', 'Core foundations'),
+ (2, 1, 'major_required', 80.0, 'Year 2-3', '2025-08-01', '2025-09-15', 'Major backbone'),
+ (3, 1, 'lab', 6.0, 'Year 3', '2025-08-01', '2025-09-15', 'Hands-on labs');
+
+INSERT INTO program_requirement_courses (requirement_id, course_id) VALUES
+ (1, 1), (2, 2), (2, 3), (2, 4), (2, 5), (3, 6);
+
+INSERT INTO course_sections (section_id, course_id, semester_id, instructor_id, section_code, capacity, waitlist_capacity, grades_locked, location_note, status, language, grading_scheme, notes)
 VALUES
- (1, 1, 1, 1, 'A01', 2, 1, 'ENG-101'),
- (2, 2, 1, 1, 'A01', 2, 1, 'ENG-102'),
- (3, 3, 1, 2, 'A01', 2, 1, 'ENG-103'),
- (4, 4, 1, 2, 'A01', 2, 1, 'ENG-104');
+ (1, 1, 1, 1, 'A01', 2, 1, 0, 'ENG-101', 'open', 'English', 'numeric', 'Freshman intro'),
+ (2, 2, 1, 1, 'A01', 2, 1, 0, 'ENG-102', 'open', 'English', 'numeric', 'Requires CSE100'),
+ (3, 3, 1, 2, 'A01', 2, 1, 0, 'ENG-103', 'open', 'English', 'numeric', NULL),
+ (4, 4, 1, 2, 'A01', 2, 1, 0, 'ENG-104', 'open', 'English', 'numeric', NULL);
 
 INSERT INTO section_meetings (meeting_id, section_id, day_of_week, start_time, end_time, room, building) VALUES
  (1, 1, 1, '09:00', '10:30', '101', 'ENG'),
@@ -237,7 +329,6 @@ INSERT INTO section_meetings (meeting_id, section_id, day_of_week, start_time, e
  (3, 3, 1, '10:30', '12:00', '103', 'ENG'),
  (4, 4, 1, '09:00', '10:30', '104', 'ENG');
 
--- Alice has completed Intro and is attempting Data Structures
 INSERT INTO enrollments (enrollment_id, student_id, section_id, status, requested_at) VALUES
  (1, 1, 1, 'passed', datetime('now')),
  (2, 1, 2, 'enrolling', datetime('now')),
@@ -251,6 +342,13 @@ INSERT INTO grades (grade_id, enrollment_id, numeric_grade, letter_grade, grade_
 
 INSERT INTO enrollment_overrides (override_id, enrollment_id, override_type, approved_by, approved_at, reason) VALUES
  (1, 2, 'prerequisite', 5, datetime('now'), 'Prerequisite satisfied after summer session');
+
+INSERT INTO student_requests (request_id, student_id, section_id, request_type, reason, status, reviewed_by, reviewed_at, metadata) VALUES
+ (1, 1, 2, 'retake', 'Student passed but wants GPA improvement', 'pending', NULL, NULL, '{\"previous_grade\": \"B\"}'),
+ (2, 2, 4, 'credit_overload', 'Need extra credits for graduation', 'approved', 5, datetime('now'), '{\"term_load\": 42}');
+
+INSERT INTO approval_logs (approval_log_id, request_id, action, actor, note, created_at) VALUES
+ (1, 2, 'approved', 5, 'Allowed overload based on graduation audit', datetime('now'));
 """
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -382,7 +480,7 @@ def check_time_conflict(conn: sqlite3.Connection, student_id: int, requested_sec
         JOIN section_meetings existing ON existing.day_of_week = candidate.day_of_week
             AND existing.start_time < candidate.end_time
             AND candidate.start_time < existing.end_time
-        JOIN enrollments e ON e.section_id = existing.section_id AND e.student_id = ? AND e.status IN ('enrolling','passed','failed','completed')
+        JOIN enrollments e ON e.section_id = existing.section_id AND e.student_id = ? AND e.status IN ('enrolling','passed','failed')
         WHERE candidate.section_id = ? AND existing.section_id != candidate.section_id
         """,
         (student_id, requested_section_id),
@@ -399,7 +497,7 @@ def planned_credits(conn: sqlite3.Connection, student_id: int, semester_code: st
         JOIN course_sections cs ON cs.section_id = e.section_id
         JOIN courses c ON c.course_id = cs.course_id
         JOIN semesters sem ON sem.semester_id = cs.semester_id
-        WHERE e.student_id = ? AND sem.code = ? AND e.status IN ('enrolling','passed','failed','completed')
+        WHERE e.student_id = ? AND sem.code = ? AND e.status IN ('enrolling','passed','failed')
         """,
         (student_id, semester_code),
     )
