@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import datetime
 
+from django.core.exceptions import ValidationError
+
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import F, Q, Max
@@ -106,6 +108,21 @@ class InstructorProfile(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.user.get_full_name() or self.user.username} ({self.department.code})"
+
+    def clean(self):
+        super().clean()
+        if not self.pk:
+            return
+        try:
+            original = InstructorProfile.objects.get(pk=self.pk)
+        except InstructorProfile.DoesNotExist:
+            return
+        if original.department_id != self.department_id:
+            raise ValidationError("教师所属院系不可自行修改，请联系管理员。")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class ClassGroup(models.Model):
@@ -240,6 +257,24 @@ class MeetingTime(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.get_day_of_week_display()} {self.start_time}-{self.end_time} ({self.location})"
+
+    def clean(self):
+        super().clean()
+        if not self.section_id:
+            return
+        instructor = self.section.instructor
+        overlap_exists = MeetingTime.objects.filter(
+            section__instructor=instructor,
+            day_of_week=self.day_of_week,
+            start_time__lt=self.end_time,
+            end_time__gt=self.start_time,
+        ).exclude(pk=self.pk).exists()
+        if overlap_exists:
+            raise ValidationError("该教师在该时间段已有其它课程，无法排课。")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class CoursePrerequisite(models.Model):

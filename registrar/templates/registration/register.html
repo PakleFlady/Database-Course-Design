@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}账号注册{% endblock %}
+{% block content %}
+<h1>账号注册</h1>
+<p>学生可直接开通账号，教师账号提交后需管理员审核激活。</p>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  <div class="form-grid">
+    {% for field in form %}
+      <div class="form-row">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+  </div>
+  <div class="actions" style="margin-top: 12px;">
+    <button class="button primary" type="submit">提交注册</button>
+    <a class="button secondary" href="{% url 'login_portal' %}">返回登录</a>
+  </div>
+</form>
+{% endblock %}
