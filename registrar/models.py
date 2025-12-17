@@ -213,7 +213,7 @@ class StudentProfile(models.Model):
         blank=True,
     )
     major = models.CharField("专业", max_length=255)
-    student_number = models.CharField("学号", max_length=32, unique=True, null=True, blank=True)
+    student_number = models.CharField("学号", max_length=32, unique=True, db_index=True, blank=True)
 
     class Meta:
         verbose_name = "学生"
@@ -224,16 +224,22 @@ class StudentProfile(models.Model):
         return f"{self.user.get_full_name() or self.user.username} - {self.major}"
 
     @classmethod
-    def generate_student_number(cls, department: Department) -> str:
-        """Generate a student number in the format <year><dept_numeric><seq>."""
+    def generate_student_number(cls, department: Department | None) -> str:
+        """Generate a student number in the format <year><dept_numeric><seq>.
 
-        if department.numeric_code is None:
-            department.assign_numeric_code()
-            if department.pk:
-                department.save(update_fields=["numeric_code"])
+        If the department is missing, the department code portion falls back to 000
+        while still guaranteeing uniqueness within the current year.
+        """
+
+        dept_code = "000"
+        if department:
+            if department.numeric_code is None:
+                department.assign_numeric_code()
+                if department.pk:
+                    department.save(update_fields=["numeric_code"])
+            dept_code = f"{int(department.numeric_code or 0):03d}"
 
         year_prefix = datetime.date.today().year
-        dept_code = f"{int(department.numeric_code):03d}"
         base_prefix = f"{year_prefix}{dept_code}"
         last_number = (
             cls.objects.filter(student_number__startswith=base_prefix)
@@ -248,7 +254,7 @@ class StudentProfile(models.Model):
         return f"{base_prefix}{sequence:03d}"
 
     def save(self, *args, **kwargs):
-        if not self.student_number and self.department:
+        if not self.student_number:
             self.student_number = self.generate_student_number(self.department)
         super().save(*args, **kwargs)
 

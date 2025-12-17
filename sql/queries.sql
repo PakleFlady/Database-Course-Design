@@ -16,7 +16,7 @@ WITH transcript AS (
     JOIN courses c ON c.course_id = cs.course_id
     JOIN semesters sem ON sem.semester_id = cs.semester_id
     LEFT JOIN grades g ON g.enrollment_id = e.enrollment_id
-    WHERE e.status IN ('completed', 'passed', 'failed')
+    WHERE e.status IN ('passed', 'failed')
 )
 SELECT t.*, 
        ROUND(SUM(t.grade_points * t.credits) OVER (PARTITION BY t.student_id) /
@@ -61,7 +61,7 @@ SELECT SUM(c.credits) AS planned_credits
 FROM enrollments e
 JOIN course_sections cs ON cs.section_id = e.section_id
 JOIN courses c ON c.course_id = cs.course_id
-WHERE e.student_id = :student_id AND cs.semester_id = :semester_id AND e.status IN ('enrolling', 'passed', 'failed', 'completed');
+WHERE e.student_id = :student_id AND cs.semester_id = :semester_id AND e.status IN ('enrolling', 'passed', 'failed');
 -- Application should enforce planned_credits BETWEEN 10 AND 40.
 
 -- 5. Time conflict detection for a student when enrolling into a new section
@@ -70,7 +70,7 @@ FROM section_meetings candidate
 JOIN section_meetings existing ON existing.day_of_week = candidate.day_of_week
     AND existing.start_time < candidate.end_time
     AND candidate.start_time < existing.end_time
-JOIN enrollments e ON e.section_id = existing.section_id AND e.student_id = :student_id AND e.status IN ('enrolling', 'passed', 'failed', 'completed')
+JOIN enrollments e ON e.section_id = existing.section_id AND e.student_id = :student_id AND e.status IN ('enrolling', 'passed', 'failed')
 WHERE candidate.section_id = :requested_section_id;
 
 -- 6. Instructor time conflict detection before assigning a section
