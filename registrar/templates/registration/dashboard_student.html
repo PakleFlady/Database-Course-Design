@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}学生自助服务{% endblock %}
+{% block content %}
+<h1>学生自助服务</h1>
+<p>报名、退课、重修等都可在此发起。概览卡片展示 GPA、学分、审批进度与可选课程数量，其余功能会在新页面中打开，确保操作后的提示停留在对应功能页。</p>
+
+<style>
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin: 12px 0 20px;
+  }
+  .feature-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .feature-card h3 { margin: 0; }
+</style>
+
+<div class="grid two">
+  <div class="stat-card">
+    <div class="stat-label">当前 GPA</div>
+    <div class="stat-value">{{ gpa|default:"--" }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">本学期计划学分</div>
+    <div class="stat-value">{{ credit_load|default:0 }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">待审批申请</div>
+    <div class="stat-value">{{ request_summary.pending }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">可选教学班</div>
+    <div class="stat-value">{{ available_section_count }}</div>
+  </div>
+</div>
+
+<div class="feature-grid">
+  <div class="feature-card">
+    <h3>个人档案</h3>
+    <p class="muted">查看基础信息与联系方式。</p>
+    <a class="button secondary" href="{% url 'student_profile' %}">打开新页面</a>
+  </div>
+  <div class="feature-card">
+    <h3>自助办理</h3>
+    <p class="muted">发起跨院、超学分等审批。</p>
+    <a class="button primary" href="{% url 'student_self_service' %}">打开新页面</a>
+  </div>
+  <div class="feature-card">
+    <h3>课表与导出</h3>
+    <p class="muted">查看排课并导出课表。</p>
+    <a class="button secondary" href="{% url 'student_schedule_overview' %}">打开新页面</a>
+  </div>
+  <div class="feature-card">
+    <h3>成绩与重修</h3>
+    <p class="muted">关注未通过课程与已选成绩。</p>
+    <a class="button secondary" href="{% url 'student_grades' %}">打开新页面</a>
+  </div>
+  <div class="feature-card">
+    <h3>申请进度</h3>
+    <p class="muted">查看历史审批与日志。</p>
+    <a class="button secondary" href="{% url 'student_requests' %}">打开新页面</a>
+  </div>
+  <div class="feature-card">
+    <h3>快捷入口</h3>
+    <p class="muted">前往选课中心或修改密码。</p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a class="button primary" href="{% url 'student_enrollment' %}">选课中心</a>
+      <a class="button secondary" href="{% url 'force_password_change' %}">修改密码</a>
+    </div>
+  </div>
+</div>
+
+<div class="hint">
+  点击上方功能卡片将跳转至对应功能页面，操作完成后的提示将停留在功能页面，不再回落到首页。
+</div>
+
+<div class="actions" style="justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top:16px;">
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <a class="button secondary" href="{% url 'force_password_change' %}">修改密码</a>
+    <a class="button primary" href="{% url 'student_enrollment' %}">进入选课中心</a>
+  </div>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}

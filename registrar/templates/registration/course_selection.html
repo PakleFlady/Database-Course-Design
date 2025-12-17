@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}选课中心{% endblock %}
+{% block content %}
+<h1>学院选课中心</h1>
+<p>以下仅展示 <strong>{{ profile.department.name }}</strong> 开设的教学班。请点击“选课”或“退课”后确认操作。</p>
+<div class="actions" style="display:flex; gap:12px; align-items:center;">
+  <a class="button secondary" href="{% url 'student_home' %}">返回概览</a>
+  <span class="muted">当前班级：{{ profile.class_group|default:"未分配班级" }}</span>
+</div>
+
+<div class="section">
+  <h2>已选课程</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>学期</th>
+        <th>教师</th>
+        <th>状态</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for enrollment in enrollments %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ enrollment.section.course.code }} {{ enrollment.section.course.name }}</td>
+        <td>{{ enrollment.section.semester.code }}</td>
+        <td>{{ enrollment.section.instructor.user.get_full_name|default:enrollment.section.instructor.user.username }}</td>
+        <td>{{ enrollment.get_status_display }}</td>
+        <td>
+          <form method="post" class="enrollment-action" data-confirm="确认退课？" style="margin:0;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="drop" />
+            <input type="hidden" name="section_id" value="{{ enrollment.section_id }}" />
+            <button type="submit" class="button danger small">退课</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">尚未选择任何课程</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>可选教学班</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>教师</th>
+        <th>时间/地点</th>
+        <th>容量 / 余量</th>
+        <th>学期</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for section in available_sections %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ section.course.code }} {{ section.course.name }}</td>
+        <td>{{ section.instructor.user.get_full_name|default:section.instructor.user.username }}</td>
+        <td>
+          {% with slots=section.meeting_times.all %}
+            {% if slots %}
+              <ul style="margin:0; padding-left:16px; color: var(--muted);">
+                {% for slot in slots %}
+                  <li>{{ slot.get_day_of_week_display }} {{ slot.start_time }}-{{ slot.end_time }} @ {{ slot.location }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              待定
+            {% endif %}
+          {% endwith %}
+        </td>
+        <td>{{ section.capacity }} / {{ section.remaining_capacity }}</td>
+        <td>{{ section.semester.code }}</td>
+        <td>
+          {% if section.id in enrollment_ids %}
+            <span class="muted">已选</span>
+            <form method="post" class="enrollment-action" data-confirm="确认退课？" style="margin-top:6px;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="drop" />
+              <input type="hidden" name="section_id" value="{{ section.id }}" />
+              <button type="submit" class="button danger small">退课</button>
+            </form>
+          {% elif section.remaining_capacity <= 0 %}
+            <span class="muted">容量已满</span>
+          {% else %}
+            <form method="post" class="enrollment-action" data-confirm="确认选课？" style="margin:0;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="enroll" />
+              <input type="hidden" name="section_id" value="{{ section.id }}" />
+              <button type="submit" class="button primary small">选课</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">暂无可选课程</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  document.querySelectorAll('.enrollment-action').forEach(function(form) {
+    form.addEventListener('submit', function(event) {
+      const message = form.dataset.confirm || '确认执行操作？';
+      if (!confirm(message) || !confirm('请再次确认：' + message)) {
+        event.preventDefault();
+      }
+    });
+  });
+</script>
+{% endblock %}

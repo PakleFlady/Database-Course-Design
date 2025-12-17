@@ -125,7 +125,7 @@ CREATE TABLE enrollments (
     enrollment_id   SERIAL PRIMARY KEY,
     student_id      INTEGER NOT NULL REFERENCES students(student_id),
     section_id      INTEGER NOT NULL REFERENCES course_sections(section_id),
-    status          VARCHAR(20) NOT NULL DEFAULT 'enrolling' CHECK (status IN ('enrolling', 'waitlisted', 'dropped', 'completed', 'failed', 'passed', 'retake_pending')),
+    status          VARCHAR(20) NOT NULL DEFAULT 'enrolling' CHECK (status IN ('enrolling', 'dropped', 'completed', 'failed', 'passed', 'retake_pending')),
     requested_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     approved_at     TIMESTAMP,
     dropped_at      TIMESTAMP,

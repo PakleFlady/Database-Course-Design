@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}管理员首页{% endblock %}
+{% block content %}
+<h1>管理员工作台</h1>
+<p>快速查看审批队列、成绩填报锁定情况以及用户创建入口。管理员首次登录已不强制修改密码。</p>
+
+<div class="actions">
+  <a class="button" href="/admin/">进入后台</a>
+  <a class="button secondary" href="{% url 'approval_queue' %}">审批队列</a>
+  <a class="button secondary" href="{% url 'force_password_change' %}">修改密码</a>
+</div>
+
+<div class="section">
+  <h2>按学院/班级批量分配课程</h2>
+  <div class="hint">为同一学院或班级的学生批量创建选课记录，避免逐一添加。</div>
+  <form method="post" action="{% url 'admin_bulk_enroll' %}">
+    {% csrf_token %}
+    {{ bulk_form.non_field_errors }}
+    <label for="id_section">教学班</label>
+    {{ bulk_form.section }}
+    <div class="grid two">
+      <div>
+        <label for="id_department">学院</label>
+        {{ bulk_form.department }}
+      </div>
+      <div>
+        <label for="id_class_group">班级</label>
+        {{ bulk_form.class_group }}
+      </div>
+    </div>
+    <label for="id_major">班级/专业（关键词匹配，可选）</label>
+    {{ bulk_form.major }}
+    <button class="button" type="submit">批量分配</button>
+  </form>
+</div>
+
+<div class="section">
+  <h2>按班级同步课表</h2>
+  <div class="hint">选择一个班级与多门教学班，一次性为班级内所有学生创建或更新对应选课记录。</div>
+  <form method="post" action="{% url 'admin_class_schedule' %}">
+    {% csrf_token %}
+    {{ class_schedule_form.non_field_errors }}
+    <label for="id_class_group">班级</label>
+    {{ class_schedule_form.class_group }}
+    <label for="id_sections">教学班（可多选）</label>
+    {{ class_schedule_form.sections }}
+    <button class="button" type="submit">同步班级课表</button>
+  </form>
+</div>
+
+<h2>待处理申请</h2>
+<table style="width:100%; border-collapse: collapse;">
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>学生</th>
+      <th>类型</th>
+      <th>教学班</th>
+      <th>提交时间</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in pending_requests %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ item.student.user.username }}</td>
+      <td>{{ item.get_request_type_display }}</td>
+      <td>{% if item.section %}{{ item.section.course.name }} ({{ item.section.semester.code }}){% else %}-{% endif %}</td>
+      <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">暂无待处理申请</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>教学班成绩填报锁定</h2>
+<table style="width:100%; border-collapse: collapse;">
+  <thead>
+    <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+      <th>课程</th>
+      <th>教师</th>
+      <th>学期</th>
+      <th>状态</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for section in sections %}
+    <tr style="border-bottom:1px solid #f1f5f9;">
+      <td>{{ section.course.code }} {{ section.course.name }}</td>
+      <td>{{ section.instructor.user.get_full_name|default:section.instructor.user.username }}</td>
+      <td>{{ section.semester.code }}</td>
+      <td>{% if section.grades_locked %}已锁定{% else %}未锁定{% endif %}</td>
+      <td>
+        <form method="post" action="{% url 'section_lock_toggle' section.id %}">
+          {% csrf_token %}
+          <button class="button secondary" type="submit">{% if section.grades_locked %}解锁{% else %}锁定{% endif %}</button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">暂无教学班</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

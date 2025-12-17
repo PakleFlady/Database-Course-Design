@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}选课与成绩管理{% endblock %}
+{% block content %}
+<h1>选课与成绩管理</h1>
+<p>在此页面集中查看各教学班选课情况、更新成绩状态，并可导出课表或返回工作台。</p>
+
+<style>
+  details.feature-panel summary::-webkit-details-marker { display: none; }
+  details.feature-panel summary { cursor: pointer; }
+</style>
+
+<div class="actions" style="margin-bottom:16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+  <a class="button secondary" href="{% url 'instructor_home' %}">返回工作台</a>
+  <a class="button secondary" href="{% url 'instructor_schedule_export' %}">导出课表</a>
+  <span class="muted">负责教学班：{{ stats.section_count }} · 当前选课记录：{{ stats.enrollment_count }}</span>
+</div>
+
+{% for item in rosters %}
+  <div class="section" style="padding:0; overflow:hidden;">
+    <details class="feature-panel" style="margin:0; border:none; box-shadow:none;" aria-label="教学班 {{ item.section.course.code }}">
+      <summary style="padding:16px; display:flex; justify-content: space-between; align-items:center; gap:12px;">
+        <div>
+          <div style="font-size:16px; font-weight:700;">{{ item.section.course.code }} {{ item.section.course.name }}</div>
+          <div class="muted">{{ item.section.semester.code }} · 班号 {{ item.section.section_number }}</div>
+        </div>
+        <span class="muted">容量 {{ item.section.capacity }}</span>
+      </summary>
+      <div class="panel-body" style="padding:0 16px 16px 16px;">
+        <div class="hint" style="display:flex; gap:12px; flex-wrap:wrap;">
+          {% for mt in item.section.meeting_times.all %}
+            <span>{{ mt.get_day_of_week_display }} {{ mt.start_time }}-{{ mt.end_time }} @ {{ mt.location }}</span>
+          {% empty %}
+            <span class="muted">暂无排课信息</span>
+          {% endfor %}
+          {% if item.section.grades_locked %}
+            <span class="badge">成绩已锁定</span>
+          {% else %}
+            <span class="badge">可录入</span>
+          {% endif %}
+        </div>
+        <table>
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+              <th>学生</th>
+              <th>状态</th>
+              <th>成绩</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for enrollment in item.enrollments %}
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td>{{ enrollment.student.user.get_full_name|default:enrollment.student.user.username }}</td>
+              <td>{{ enrollment.get_status_display }}</td>
+              <td>{{ enrollment.final_grade|default:"-" }}</td>
+              <td>
+                <form method="post" action="{% url 'grade_update' enrollment.section_id %}" style="display:flex; gap:6px; align-items:center;">
+                  {% csrf_token %}
+                  <input type="hidden" name="enrollment_id" value="{{ enrollment.id }}" />
+                  <label class="sr-only" for="grade-{{ enrollment.id }}">成绩</label>
+                  <select name="final_grade" id="grade-{{ enrollment.id }}">
+                    <option value="">--</option>
+                    {% for code,label in enrollment.GRADE_CHOICES %}
+                    <option value="{{ code }}" {% if enrollment.final_grade == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                  <select name="status">
+                    {% for code,label in enrollment.STATUS_CHOICES %}
+                    <option value="{{ code }}" {% if enrollment.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                  <button class="button secondary" type="submit" {% if enrollment.section.grades_locked %}disabled{% endif %}>保存</button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">暂无选课记录</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+{% empty %}
+  <div class="section">
+    <p>当前未分配教学班。</p>
+  </div>
+{% endfor %}
+
+<div class="actions">
+  <a class="button secondary" href="{% url 'instructor_home' %}">返回工作台</a>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}

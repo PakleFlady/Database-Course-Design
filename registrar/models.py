@@ -1,16 +1,37 @@
 """Django models for the course registration and grade management domain."""
 from __future__ import annotations
 
+import datetime
+
+from django.core.exceptions import ValidationError
+
 from django.contrib.auth import get_user_model
 from django.db import models
-from django.db.models import F, Q
+from django.db.models import F, Q, Max
 
 User = get_user_model()
+
+
+class UserSecurity(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="security", verbose_name="账号")
+    must_change_password = models.BooleanField("首次登录需修改密码", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "账号安全设置"
+        verbose_name_plural = "账号安全设置"
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"Security settings for {self.user.username}"
 
 
 class Department(models.Model):
     code = models.CharField("院系代码", max_length=20, unique=True)
     name = models.CharField("院系名称", max_length=255)
+    numeric_code = models.PositiveSmallIntegerField(
+        "院系编号", unique=True, null=True, blank=True
+    )
 
     class Meta:
         verbose_name = "院系"
@@ -18,7 +39,20 @@ class Department(models.Model):
         ordering = ["code"]
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
-        return f"{self.code} - {self.name}"
+        numeric = f"#{self.numeric_code}" if self.numeric_code is not None else "未编号"
+        return f"{self.code} ({numeric}) - {self.name}"
+
+    def assign_numeric_code(self) -> int:
+        """Ensure the department has an auto-incrementing numeric code."""
+
+        if self.numeric_code is None:
+            current_max = Department.objects.aggregate(max_code=Max("numeric_code")).get("max_code") or 0
+            self.numeric_code = current_max + 1
+        return int(self.numeric_code)
+
+    def save(self, *args, **kwargs):
+        self.assign_numeric_code()
+        super().save(*args, **kwargs)
 
 
 class Semester(models.Model):
@@ -75,6 +109,35 @@ class InstructorProfile(models.Model):
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.user.get_full_name() or self.user.username} ({self.department.code})"
 
+    def clean(self):
+        super().clean()
+        if not self.pk:
+            return
+        try:
+            original = InstructorProfile.objects.get(pk=self.pk)
+        except InstructorProfile.DoesNotExist:
+            return
+        if original.department_id != self.department_id:
+            raise ValidationError("教师所属院系不可自行修改，请联系管理员。")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class ClassGroup(models.Model):
+    name = models.CharField("班级名称", max_length=100)
+    department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="class_groups", verbose_name="所属学院")
+
+    class Meta:
+        verbose_name = "班级"
+        verbose_name_plural = "班级"
+        unique_together = [("name", "department")]
+        ordering = ["department__code", "name"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.department.code}-{self.name}"
+
 
 class StudentProfile(models.Model):
     GENDER_CHOICES = [
@@ -88,16 +151,61 @@ class StudentProfile(models.Model):
     date_of_birth = models.DateField("出生日期", null=True, blank=True)
     contact_email = models.EmailField("联系邮箱", blank=True)
     contact_phone = models.CharField("联系电话", max_length=50, blank=True)
-    college = models.CharField("学院", max_length=255)
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="students",
+        verbose_name="学院",
+        null=True,
+        blank=True,
+    )
+    class_group = models.ForeignKey(
+        ClassGroup,
+        on_delete=models.PROTECT,
+        related_name="students",
+        verbose_name="班级",
+        null=True,
+        blank=True,
+    )
     major = models.CharField("专业", max_length=255)
+    student_number = models.CharField("学号", max_length=32, unique=True, null=True, blank=True)
 
     class Meta:
         verbose_name = "学生"
         verbose_name_plural = "学生"
-        ordering = ["user__username"]
+        ordering = ["student_number", "user__username"]
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.user.get_full_name() or self.user.username} - {self.major}"
+
+    @classmethod
+    def generate_student_number(cls, department: Department) -> str:
+        """Generate a student number in the format <year><dept_numeric><seq>."""
+
+        if department.numeric_code is None:
+            department.assign_numeric_code()
+            if department.pk:
+                department.save(update_fields=["numeric_code"])
+
+        year_prefix = datetime.date.today().year
+        dept_code = f"{int(department.numeric_code):03d}"
+        base_prefix = f"{year_prefix}{dept_code}"
+        last_number = (
+            cls.objects.filter(student_number__startswith=base_prefix)
+            .order_by("-student_number")
+            .values_list("student_number", flat=True)
+            .first()
+        )
+        if last_number and last_number[-3:].isdigit():
+            sequence = int(last_number[-3:]) + 1
+        else:
+            sequence = 1
+        return f"{base_prefix}{sequence:03d}"
+
+    def save(self, *args, **kwargs):
+        if not self.student_number and self.department:
+            self.student_number = self.generate_student_number(self.department)
+        super().save(*args, **kwargs)
 
 
 class CourseSection(models.Model):
@@ -106,6 +214,7 @@ class CourseSection(models.Model):
     instructor = models.ForeignKey(InstructorProfile, on_delete=models.PROTECT, related_name="sections", verbose_name="教师")
     section_number = models.PositiveSmallIntegerField("教学班号", default=1)
     capacity = models.PositiveIntegerField("容量", default=60)
+    grades_locked = models.BooleanField("成绩填报锁定", default=False)
     notes = models.TextField("备注", blank=True)
 
     class Meta:
@@ -149,6 +258,24 @@ class MeetingTime(models.Model):
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.get_day_of_week_display()} {self.start_time}-{self.end_time} ({self.location})"
 
+    def clean(self):
+        super().clean()
+        if not self.section_id:
+            return
+        instructor = self.section.instructor
+        overlap_exists = MeetingTime.objects.filter(
+            section__instructor=instructor,
+            day_of_week=self.day_of_week,
+            start_time__lt=self.end_time,
+            end_time__gt=self.start_time,
+        ).exclude(pk=self.pk).exists()
+        if overlap_exists:
+            raise ValidationError("该教师在该时间段已有其它课程，无法排课。")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
 
 class CoursePrerequisite(models.Model):
     GRADE_CHOICES = [
@@ -176,7 +303,6 @@ class CoursePrerequisite(models.Model):
 class Enrollment(models.Model):
     STATUS_CHOICES = [
         ("enrolling", "选课中"),
-        ("waitlisted", "候补"),
         ("dropped", "已退课"),
         ("passed", "已通过"),
         ("failed", "未通过"),
@@ -205,3 +331,93 @@ class Enrollment(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.student} -> {self.section} ({self.status})"
+
+
+class StudentRequest(models.Model):
+    REQUEST_TYPE_CHOICES = [
+        ("enroll", "报名/选课"),
+        ("drop", "退课申请"),
+        ("retake", "重修申请"),
+        ("cross_college", "跨院选课审批"),
+        ("credit_overload", "超学分申请"),
+    ]
+
+    STATUS_CHOICES = [
+        ("pending", "待审批"),
+        ("approved", "已通过"),
+        ("rejected", "已驳回"),
+    ]
+
+    student = models.ForeignKey(
+        StudentProfile,
+        on_delete=models.CASCADE,
+        related_name="requests",
+        verbose_name="学生",
+    )
+    section = models.ForeignKey(
+        CourseSection,
+        on_delete=models.SET_NULL,
+        related_name="requests",
+        null=True,
+        blank=True,
+        verbose_name="教学班",
+    )
+    request_type = models.CharField("申请类型", max_length=32, choices=REQUEST_TYPE_CHOICES)
+    reason = models.TextField("申请原因", blank=True)
+    status = models.CharField("审批状态", max_length=16, choices=STATUS_CHOICES, default="pending")
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="handled_requests",
+        verbose_name="审核人",
+    )
+    reviewed_at = models.DateTimeField("审核时间", null=True, blank=True)
+    metadata = models.JSONField("附加信息", default=dict, blank=True)
+    created_at = models.DateTimeField("提交时间", auto_now_add=True)
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        verbose_name = "学生自助申请"
+        verbose_name_plural = "学生自助申请"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.get_request_type_display()} - {self.student} ({self.get_status_display()})"
+
+    def requires_approval(self) -> bool:
+        return self.request_type in {"retake", "cross_college", "credit_overload"}
+
+
+class ApprovalLog(models.Model):
+    ACTION_CHOICES = [
+        ("approved", "通过"),
+        ("rejected", "驳回"),
+    ]
+
+    request = models.ForeignKey(
+        StudentRequest,
+        on_delete=models.CASCADE,
+        related_name="logs",
+        verbose_name="申请",
+    )
+    action = models.CharField("操作", max_length=16, choices=ACTION_CHOICES)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_logs",
+        verbose_name="执行人",
+    )
+    note = models.TextField("审核意见", blank=True)
+    created_at = models.DateTimeField("时间", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "审批日志"
+        verbose_name_plural = "审批日志"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.request} -> {self.get_action_display()}"

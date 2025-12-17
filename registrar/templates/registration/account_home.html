@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}个人首页{% endblock %}
+{% block content %}
+<h1>欢迎，{{ request.user.username }}！</h1>
+<p>请选择你在本系统的身份入口继续。管理员默认密码无需强制修改，其他账号可在首次登录后自行更新。</p>
+
+<div class="actions">
+  <a class="button" href="{% url 'student_home' %}">我是学生</a>
+  <a class="button" href="{% url 'instructor_home' %}">我是教师</a>
+  <a class="button secondary" href="{% url 'admin_home' %}">管理员工作台</a>
+  <a class="button secondary" href="{% url 'force_password_change' %}">修改密码</a>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}
