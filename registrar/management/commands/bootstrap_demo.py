@@ -294,8 +294,20 @@ class Command(BaseCommand):
                 defaults={"location": f"A{100 + idx}"},
             )
 
-        grade_points = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
-        status_pattern = [("passed", "A"), ("passed", "B"), ("failed", "F"), ("enrolling", None), ("passed", "C")]
+        def calc_points(score: float | None):
+            if score is None:
+                return None
+            if score >= 90:
+                return 4.0
+            if score >= 80:
+                return 3.0
+            if score >= 70:
+                return 2.0
+            if score >= 60:
+                return 1.0
+            return 0.0
+
+        status_pattern = [("passed", 95), ("passed", 85), ("failed", 55), ("enrolling", None), ("passed", 72)]
         sections_for_enroll = created_sections[:10]
         if not sections_for_enroll:
             self.stdout.write(self.style.ERROR("No sections were created; cannot seed enrollments."))
@@ -308,8 +320,8 @@ class Command(BaseCommand):
                 section=primary_section,
                 defaults={
                     "status": status,
-                    "final_grade": grade or "",
-                    "grade_points": grade_points.get(grade) if grade else None,
+                    "final_grade": grade,
+                    "grade_points": calc_points(grade),
                 },
             )
 
@@ -320,8 +332,8 @@ class Command(BaseCommand):
                 section=secondary_section,
                 defaults={
                     "status": sec_status,
-                    "final_grade": sec_grade or "",
-                    "grade_points": grade_points.get(sec_grade) if sec_grade else None,
+                    "final_grade": sec_grade,
+                    "grade_points": calc_points(sec_grade),
                 },
             )
 

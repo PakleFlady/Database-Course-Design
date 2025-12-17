@@ -256,7 +256,7 @@ class CourseSection(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="sections", verbose_name="课程")
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name="sections", verbose_name="学期")
     instructor = models.ForeignKey(InstructorProfile, on_delete=models.PROTECT, related_name="sections", verbose_name="教师")
-    section_number = models.PositiveSmallIntegerField("教学班号", default=1)
+    section_number = models.PositiveSmallIntegerField("教学班号", null=True, blank=True)
     capacity = models.PositiveIntegerField("容量", default=60)
     grades_locked = models.BooleanField("成绩填报锁定", default=False)
     notes = models.TextField("备注", blank=True)
@@ -269,6 +269,22 @@ class CourseSection(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.course.code}-S{self.section_number} ({self.semester.code})"
+
+    def _assign_section_number(self):
+        if self.section_number:
+            return
+        max_no = (
+            CourseSection.objects.filter(course=self.course, semester=self.semester)
+            .aggregate(max_no=Max("section_number"))
+            .get("max_no")
+            or 0
+        )
+        self.section_number = max_no + 1
+
+    def save(self, *args, **kwargs):
+        if self.course_id and self.semester_id and not self.section_number:
+            self._assign_section_number()
+        super().save(*args, **kwargs)
 
 
 class MeetingTime(models.Model):
@@ -351,20 +367,11 @@ class Enrollment(models.Model):
         ("passed", "已通过"),
         ("failed", "未通过"),
     ]
-    GRADE_CHOICES = [
-        ("A", "A"),
-        ("B", "B"),
-        ("C", "C"),
-        ("D", "D"),
-        ("F", "F"),
-        ("P", "P"),
-        ("NP", "NP"),
-    ]
 
     student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="enrollments", verbose_name="学生")
     section = models.ForeignKey(CourseSection, on_delete=models.CASCADE, related_name="enrollments", verbose_name="教学班")
     status = models.CharField("状态", max_length=20, choices=STATUS_CHOICES, default="enrolling")
-    final_grade = models.CharField("最终成绩", max_length=2, choices=GRADE_CHOICES, blank=True)
+    final_grade = models.DecimalField("最终成绩", max_digits=5, decimal_places=2, null=True, blank=True)
     grade_points = models.DecimalField("绩点", max_digits=4, decimal_places=2, null=True, blank=True)
 
     class Meta:

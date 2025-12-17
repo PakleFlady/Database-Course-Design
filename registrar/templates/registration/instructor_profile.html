@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}教师信息{% endblock %}
+{% block content %}
+<h1>个人信息</h1>
+<p>更新联系方式与职称。教师账号需管理员审核后方可使用，邮箱将用于通知。</p>
+
+<div class="section">
+  <h3>基本信息</h3>
+  <ul>
+    <li>用户名：{{ profile.user.username }}</li>
+    <li>姓名：{{ profile.user.get_full_name|default:"-" }}</li>
+    <li>院系：{{ profile.department.name }}</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h3>联系方式与职称</h3>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <label for="id_email">邮箱</label>
+    {{ form.email }}
+    <label for="id_office_phone">办公电话</label>
+    {{ form.office_phone }}
+    <label for="id_title">职称</label>
+    {{ form.title }}
+    <button class="button" type="submit">保存</button>
+  </form>
+</div>
+
+<div class="actions" style="margin-top:12px;">
+  <a class="button secondary" href="{% url 'instructor_home' %}">返回教师首页</a>
+  <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+</div>
+{% endblock %}

@@ -45,7 +45,7 @@
       </div>
       <h3>类别学分要求</h3>
       <ul>
-        {% for label, credits in item.category_summary.items %}
+        {% for label, credits in item.category_summary %}
         <li>{{ label }}：{{ credits }} 学分</li>
         {% endfor %}
       </ul>

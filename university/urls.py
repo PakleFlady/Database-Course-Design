@@ -26,6 +26,7 @@ from registrar.views import (
     StudentScheduleView,
     StudentSelfServiceView,
     InstructorDashboardView,
+    InstructorProfileView,
     InstructorRosterView,
     InstructorScheduleExportView,
     UserLogoutView,
@@ -89,6 +90,11 @@ urlpatterns = [
         "accounts/home/instructor/roster/",
         InstructorRosterView.as_view(),
         name="instructor_roster",
+    ),
+    path(
+        "accounts/home/instructor/profile/",
+        InstructorProfileView.as_view(),
+        name="instructor_profile",
     ),
     path(
         "accounts/home/instructor/sections/<int:section_id>/grade/",

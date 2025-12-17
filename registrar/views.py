@@ -31,6 +31,7 @@ from .forms import (
     ApprovalDecisionForm,
     AccountRegistrationForm,
     InstructorAuthenticationForm,
+    InstructorContactForm,
     SelfServiceRequestForm,
     StudentAuthenticationForm,
     StudentContactForm,
@@ -51,17 +52,38 @@ from .models import (
 )
 
 
+def grade_to_points(grade):
+    try:
+        numeric = float(grade)
+    except (TypeError, ValueError):
+        return None
+    if numeric >= 90:
+        return 4.0
+    if numeric >= 80:
+        return 3.0
+    if numeric >= 70:
+        return 2.0
+    if numeric >= 60:
+        return 1.0
+    return 0.0
+
+
+def is_passing_grade(grade):
+    try:
+        return float(grade) >= 60
+    except (TypeError, ValueError):
+        return False
+
+
 def calculate_gpa_from_enrollments(enrollments):
-    grade_points = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
     total_points = 0
     total_credits = 0
     for enroll in enrollments:
-        if enroll.final_grade:
-            pts = grade_points.get(enroll.final_grade)
-            if pts is None:
-                continue
-            total_points += float(enroll.section.course.credits) * pts
-            total_credits += float(enroll.section.course.credits)
+        pts = grade_to_points(enroll.final_grade)
+        if pts is None:
+            continue
+        total_points += float(enroll.section.course.credits) * pts
+        total_credits += float(enroll.section.course.credits)
     if total_credits == 0:
         return None
     return round(total_points / total_credits, 2)
@@ -210,7 +232,7 @@ class EnrollmentValidationMixin:
                 return "与已选课程存在时间冲突。"
 
         missing = []
-        grade_order = {"A": 4, "B": 3, "C": 2, "D": 1, "P": 2, "F": 0, "NP": 0}
+        grade_threshold = {"A": 90, "B": 80, "C": 70, "D": 60, "P": 60, "NP": 0, "F": 0}
         prereqs = CoursePrerequisite.objects.filter(course=section.course)
         for prereq in prereqs:
             record = Enrollment.objects.filter(
@@ -221,7 +243,13 @@ class EnrollmentValidationMixin:
             if not record:
                 missing.append(prereq.prerequisite.code)
                 continue
-            if grade_order.get(record.final_grade, 0) < grade_order.get(prereq.min_grade, 0):
+            threshold = grade_threshold.get(prereq.min_grade, 0)
+            try:
+                actual = float(record.final_grade)
+            except (TypeError, ValueError):
+                missing.append(prereq.prerequisite.code)
+                continue
+            if actual < threshold:
                 missing.append(prereq.prerequisite.code)
         if missing:
             return "未满足先修要求：" + ", ".join(missing)
@@ -611,7 +639,7 @@ class CurriculumPlanView(LoginRequiredMixin, TemplateView):
                 {
                     "plan": plan,
                     "requirements": requirements,
-                    "category_summary": category_summary,
+                    "category_summary": list(category_summary.items()),
                     "is_open": bool(plan.enrollment_start and plan.enrollment_end and plan.enrollment_start <= today <= plan.enrollment_end),
                 }
             )
@@ -733,6 +761,31 @@ class InstructorDashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class InstructorProfileView(LoginRequiredMixin, TemplateView):
+    template_name = "registration/instructor_profile.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not hasattr(request.user, "instructor_profile"):
+            return HttpResponseForbidden("仅教师可访问此页面")
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        form = InstructorContactForm(request.POST, instructor=request.user.instructor_profile)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "联系方式已更新。")
+            return redirect("instructor_profile")
+        return self.render_to_response(self.get_context_data(form=form))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["profile"] = self.request.user.instructor_profile
+        context["form"] = kwargs.get("form") or InstructorContactForm(
+            instructor=self.request.user.instructor_profile
+        )
+        return context
+
+
 class InstructorRosterView(LoginRequiredMixin, TemplateView):
     template_name = "registration/instructor_roster.html"
 
@@ -796,7 +849,7 @@ class AdminDashboardView(LoginRequiredMixin, TemplateView):
             .values("section__course__code", "section__course__name")
             .annotate(
                 total=Count("id"),
-                passed=Count("id", filter=Q(status="passed") | Q(final_grade__in=["A", "B", "C", "D", "P"])),
+                passed=Count("id", filter=Q(status="passed") | Q(final_grade__gte=60)),
             )
             .order_by("section__course__code")[:15]
         )
@@ -995,12 +1048,19 @@ class InstructorGradeUpdateView(LoginRequiredMixin, View):
             return redirect("instructor_home")
 
         enrollment_id = request.POST.get("enrollment_id")
-        grade = request.POST.get("final_grade")
+        grade_raw = request.POST.get("final_grade")
         status = request.POST.get("status", "enrolling")
 
-        if grade and grade not in dict(Enrollment.GRADE_CHOICES):
-            messages.error(request, "成绩格式不正确。")
-            return redirect("instructor_home")
+        grade = None
+        if grade_raw:
+            try:
+                grade = round(float(grade_raw), 2)
+            except ValueError:
+                messages.error(request, "成绩格式不正确，请输入数字。")
+                return redirect("instructor_home")
+            if grade < 0 or grade > 100:
+                messages.error(request, "成绩需在 0-100 之间。")
+                return redirect("instructor_home")
 
         try:
             enrollment = Enrollment.objects.get(pk=enrollment_id, section=section)
@@ -1010,14 +1070,10 @@ class InstructorGradeUpdateView(LoginRequiredMixin, View):
 
         enrollment.final_grade = grade
         enrollment.status = status
-        enrollment.grade_points = self._grade_to_points(grade)
+        enrollment.grade_points = grade_to_points(grade)
         enrollment.save(update_fields=["final_grade", "status", "grade_points"])
         messages.success(request, "已更新成绩记录。")
         return redirect("instructor_home")
-
-    def _grade_to_points(self, grade: str | None):
-        mapping = {"A": 4.0, "B": 3.0, "C": 2.0, "D": 1.0, "F": 0.0, "P": 2.0, "NP": 0.0}
-        return mapping.get(grade)
 
 
 class AdminSectionLockToggleView(LoginRequiredMixin, View):

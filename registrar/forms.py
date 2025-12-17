@@ -19,6 +19,14 @@ from .models import (
 User = get_user_model()
 
 
+MAJOR_OPTIONS = {
+    "CSE": ["软件工程", "计算机科学与技术", "人工智能", "网络安全", "数据科学"],
+    "MATH": ["数学与应用数学", "统计学", "金融数学"],
+    "EE": ["电子信息工程", "通信工程", "智能感知"],
+    "BUS": ["信息管理与信息系统", "工商管理", "金融科技"],
+}
+
+
 class _RoleAuthenticationForm(AuthenticationForm):
     """Base form enforcing that a user matches the expected role."""
 
@@ -73,6 +81,22 @@ class UserCreationWithProfileForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["class_group"].queryset = ClassGroup.objects.select_related("department")
+        dept_value = None
+        data = self.data or None
+        if data and data.get("department"):
+            try:
+                dept_value = Department.objects.get(pk=data.get("department"))
+            except Department.DoesNotExist:
+                dept_value = None
+        if not dept_value and self.initial.get("department"):
+            dept_value = self.initial["department"]
+
+        if dept_value:
+            self.fields["class_group"].queryset = ClassGroup.objects.filter(department=dept_value)
+            self._set_major_choices(dept_value)
+        else:
+            all_majors = sorted({major for majors in MAJOR_OPTIONS.values() for major in majors})
+            self.fields["major"].choices = [("", "请选择专业")] + [(major, major) for major in all_majors]
 
     def clean(self):
         cleaned = super().clean()
@@ -133,7 +157,15 @@ class AccountRegistrationForm(forms.Form):
     role = forms.ChoiceField(label="注册角色", choices=ROLE_CHOICES)
     department = forms.ModelChoiceField(label="所属院系", queryset=Department.objects.all(), required=False)
     class_group = forms.ModelChoiceField(label="班级", queryset=ClassGroup.objects.select_related("department"), required=False)
-    major = forms.CharField(label="专业", required=False)
+    major = forms.ChoiceField(label="专业", required=False, choices=[])
+
+    def _set_major_choices(self, department):
+        if department and department.code in MAJOR_OPTIONS:
+            choices = [(m, m) for m in MAJOR_OPTIONS[department.code]]
+        else:
+            # fallback
+            choices = [("", "请选择专业")]
+        self.fields["major"].choices = [("", "请选择专业")] + choices
 
     def clean(self):
         cleaned = super().clean()
@@ -155,6 +187,13 @@ class AccountRegistrationForm(forms.Form):
             raise ValidationError("学生注册需填写所属院系与专业信息。")
         if class_group and department and class_group.department != department:
             raise ValidationError("班级必须属于所选院系。")
+        if role == "student" and department:
+            self._set_major_choices(department)
+            if major and major not in dict(self.fields["major"].choices):
+                raise ValidationError("请选择所属院系下的专业。")
+        if role == "instructor":
+            cleaned["class_group"] = None
+            cleaned["major"] = ""
         return cleaned
 
     def save(self):
@@ -190,6 +229,36 @@ class StudentContactForm(forms.ModelForm):
         model = StudentProfile
         fields = ["contact_email", "contact_phone"]
         labels = {"contact_email": "联系邮箱", "contact_phone": "联系电话"}
+
+
+class InstructorContactForm(forms.Form):
+    email = forms.EmailField(label="邮箱", required=False)
+    office_phone = forms.CharField(label="办公电话", required=False)
+    title = forms.CharField(label="职称", required=False)
+
+    def __init__(self, *args, instructor=None, **kwargs):
+        self.instructor = instructor
+        initial = {}
+        if instructor:
+            initial = {
+                "email": instructor.user.email,
+                "office_phone": instructor.office_phone,
+                "title": instructor.title,
+            }
+        kwargs.setdefault("initial", initial)
+        super().__init__(*args, **kwargs)
+
+    def save(self):
+        if not self.instructor:
+            return
+        data = self.cleaned_data
+        user = self.instructor.user
+        user.email = data.get("email", "")
+        user.save(update_fields=["email"])
+        self.instructor.office_phone = data.get("office_phone", "")
+        self.instructor.title = data.get("title", "")
+        self.instructor.save(update_fields=["office_phone", "title"])
+        return self.instructor
 
 
 class SelfServiceRequestForm(forms.ModelForm):

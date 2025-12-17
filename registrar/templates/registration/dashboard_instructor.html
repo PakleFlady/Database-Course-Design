@@ -4,6 +4,12 @@
 <h1>教师工作台</h1>
 <p>查看你负责的教学班、审批学生申请，并在锁定前快速完成成绩录入。下方提供课表、成绩统计和审批入口，便于日常教学管理。</p>
 
+<div class="actions" style="flex-wrap: wrap; gap:8px;">
+  <a class="button" href="{% url 'instructor_roster' %}">成绩与名单</a>
+  <a class="button secondary" href="{% url 'approval_queue' %}">审批队列</a>
+  <a class="button secondary" href="{% url 'instructor_profile' %}">更新个人信息</a>
+</div>
+
 <div class="grid two">
   <div class="stat-card">
     <div class="stat-label">负责教学班</div>
