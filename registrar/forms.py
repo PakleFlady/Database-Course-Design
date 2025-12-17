@@ -62,7 +62,7 @@ class UserCreationWithProfileForm(forms.ModelForm):
         label="所属院系", queryset=Department.objects.all(), required=False
     )
     class_group = forms.ModelChoiceField(label="班级", queryset=None, required=False)
-    major = forms.CharField(label="专业", required=False)
+    major = forms.ChoiceField(label="专业", required=False, choices=[])
 
     class Meta:
         model = User

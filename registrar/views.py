@@ -260,6 +260,7 @@ class AccountHomeView(LoginRequiredMixin, TemplateView):
 class UserLogoutView(LogoutView):
     """Show a friendly logout confirmation page instead of silent redirect."""
 
+    next_page = reverse_lazy("login_portal")
     template_name = "registration/logout_success.html"
 
     def dispatch(self, request, *args, **kwargs):
@@ -274,8 +275,8 @@ class UserLogoutView(LogoutView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_next_page(self):
-        # 如果明确指定 next 参数则尊重跳转，否则直接渲染“退出成功”页面，避免 302 后出现身份判断错误
-        return self.request.GET.get("next") or None
+        # 优先尊重 next 参数，否则回到统一登录入口，确保退出后可以立即重新登录
+        return self.request.GET.get("next") or self.next_page
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
