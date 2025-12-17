@@ -16,6 +16,8 @@ from registrar.models import (
     Enrollment,
     InstructorProfile,
     MeetingTime,
+    ProgramPlan,
+    ProgramRequirement,
     Semester,
     StudentProfile,
     UserSecurity,
@@ -112,6 +114,50 @@ class Command(BaseCommand):
         course_lookup = {c.code: c for c in Course.objects.filter(code__in=[c[0] for c in courses])}
         CoursePrerequisite.objects.get_or_create(course=course_lookup["CSE200"], prerequisite=course_lookup["CSE100"], defaults={"min_grade": "C"})
 
+        cse_plan, _ = ProgramPlan.objects.get_or_create(
+            name="软件工程 2025 级培养方案",
+            department=cse,
+            major="软件工程",
+            academic_year="2025",
+            defaults={
+                "total_credits": 140,
+                "enrollment_start": fall.start_date,
+                "enrollment_end": fall.end_date,
+            },
+        )
+        bus_plan, _ = ProgramPlan.objects.get_or_create(
+            name="信管 2025 级培养方案",
+            department=bus,
+            major="信息管理与信息系统",
+            academic_year="2025",
+            defaults={
+                "total_credits": 130,
+                "enrollment_start": fall.start_date,
+                "enrollment_end": fall.end_date,
+            },
+        )
+
+        def ensure_requirement(plan, category, credits, recommended_term, course_codes):
+            requirement, _ = ProgramRequirement.objects.get_or_create(
+                plan=plan,
+                category=category,
+                defaults={"required_credits": credits, "recommended_term": recommended_term},
+            )
+            requirement.required_credits = credits
+            requirement.recommended_term = recommended_term
+            requirement.save(update_fields=["required_credits", "recommended_term"])
+
+            linked_courses = [course_lookup[c] for c in course_codes if c in course_lookup]
+            if linked_courses:
+                requirement.courses.set(linked_courses)
+
+        ensure_requirement(cse_plan, "foundational_required", 12.0, "大一上", ["CSE100"])
+        ensure_requirement(cse_plan, "major_required", 12.0, "大一下", ["CSE200"])
+        ensure_requirement(cse_plan, "major_elective", 6.0, "大二", ["CSE180", "CSE160"])
+
+        ensure_requirement(bus_plan, "general_elective", 8.0, "大一", ["BUS110", "BUS160"])
+        ensure_requirement(bus_plan, "major_required", 10.0, "大二", ["BUS110"])
+
         sections = [
             (course_lookup["CSE100"], instructors["carol"], 60),
             (course_lookup["CSE200"], instructors["carol"], 50),
@@ -158,4 +204,4 @@ class Command(BaseCommand):
                 defaults={"status": status, "final_grade": grade, "grade_points": calc_points(grade)},
             )
 
-        self.stdout.write(self.style.SUCCESS("Compact demo data ready. Use admin/admin123 to log in."))
+        self.stdout.write(self.style.SUCCESS("Compact demo data ready (含示例培养方案). Use admin/admin123 to log in."))

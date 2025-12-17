@@ -98,6 +98,13 @@ class UserCreationWithProfileForm(forms.ModelForm):
             all_majors = sorted({major for majors in MAJOR_OPTIONS.values() for major in majors})
             self.fields["major"].choices = [("", "请选择专业")] + [(major, major) for major in all_majors]
 
+    def _set_major_choices(self, department):
+        if department and department.code in MAJOR_OPTIONS:
+            choices = [(m, m) for m in MAJOR_OPTIONS[department.code]]
+        else:
+            choices = []
+        self.fields["major"].choices = [("", "请选择专业")] + choices
+
     def clean(self):
         cleaned = super().clean()
         role = cleaned.get("role")
@@ -109,6 +116,10 @@ class UserCreationWithProfileForm(forms.ModelForm):
             raise forms.ValidationError("创建教师账号时必须选择所属院系。")
         if role == "student" and (not department or not major):
             raise forms.ValidationError("创建学生账号时需填写学院与专业。")
+        if role == "student" and department:
+            self._set_major_choices(department)
+            if major and major not in dict(self.fields["major"].choices):
+                raise forms.ValidationError("请选择所属院系下的专业。")
         if class_group and class_group.department != department:
             raise forms.ValidationError("班级必须隶属于所选学院。")
         return cleaned

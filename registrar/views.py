@@ -262,6 +262,7 @@ class UserLogoutView(LogoutView):
 
     next_page = reverse_lazy("login_portal")
     template_name = "registration/logout_success.html"
+    http_method_names = ["get", "post", "head", "options"]
 
     def dispatch(self, request, *args, **kwargs):
         self.logout_role = None
@@ -273,6 +274,10 @@ class UserLogoutView(LogoutView):
             elif request.user.is_staff:
                 self.logout_role = "admin"
         return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        # 某些前端调用使用 POST 触发退出，确保不再返回 405
+        return self.get(request, *args, **kwargs)
 
     def get_next_page(self):
         # 优先尊重 next 参数，否则回到统一登录入口，确保退出后可以立即重新登录
