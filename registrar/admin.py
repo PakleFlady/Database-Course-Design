@@ -67,6 +67,37 @@ class EnrollMajorActionForm(ActionForm):
     department = forms.ModelChoiceField(label="学院", queryset=Department.objects.all(), required=False)
 
 
+class EnrollmentInline(admin.TabularInline):
+    model = Enrollment
+    extra = 0
+    fields = ("section", "get_semester", "status", "final_grade", "grade_points")
+    readonly_fields = ("get_semester",)
+    verbose_name = "选课记录"
+    verbose_name_plural = "选课记录"
+
+    @admin.display(description="学期")
+    def get_semester(self, obj):
+        return obj.section.semester
+
+
+class StudentRequestInline(admin.TabularInline):
+    model = StudentRequest
+    extra = 0
+    fields = ("request_type", "section", "status", "created_at", "reviewed_by")
+    readonly_fields = ("created_at",)
+    verbose_name = "学生申请"
+    verbose_name_plural = "学生申请"
+
+
+class CourseSectionInline(admin.TabularInline):
+    model = CourseSection
+    extra = 0
+    fields = ("course", "semester", "section_number", "capacity", "grades_locked")
+    readonly_fields = ("section_number",)
+    verbose_name = "教学班"
+    verbose_name_plural = "教学班"
+
+
 @admin.register(CourseSection)
 class CourseSectionAdmin(admin.ModelAdmin):
     list_display = (
@@ -190,6 +221,7 @@ class ApprovalLogAdmin(admin.ModelAdmin):
 class StudentProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "student_number", "major", "department", "class_group")
     search_fields = ("user__username", "student_number", "major", "department__name", "class_group__name")
+    inlines = [EnrollmentInline, StudentRequestInline]
 
 
 @admin.register(InstructorProfile)
@@ -197,6 +229,7 @@ class InstructorProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "department", "title")
     list_filter = ("department",)
     search_fields = ("user__username", "title")
+    inlines = [CourseSectionInline]
 
 
 @admin.register(CoursePrerequisite)
