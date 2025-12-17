@@ -6,6 +6,7 @@ from collections import defaultdict
 
 from django.contrib import messages
 from django.contrib.auth import logout
+from django.contrib.auth import login
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import (
@@ -14,22 +15,24 @@ from django.contrib.auth.views import (
     PasswordChangeDoneView,
     PasswordChangeView,
 )
-from django.db.models import Count, Q, F
+from django.db.models import Count, Q, F, Sum
 from django.db.models.functions import Greatest
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, FormView
 
 from .forms import (
     AdminBulkEnrollmentForm,
     AdminClassScheduleForm,
     ApprovalDecisionForm,
+    AccountRegistrationForm,
     InstructorAuthenticationForm,
     SelfServiceRequestForm,
     StudentAuthenticationForm,
+    StudentContactForm,
 )
 from .models import (
     ApprovalLog,
@@ -104,6 +107,22 @@ class InstructorLoginView(LoginView):
     def get_success_url(self):
         redirect_to = self.get_redirect_url()
         return redirect_to or reverse_lazy("account_home")
+
+
+class AccountRegistrationView(FormView):
+    template_name = "registration/register.html"
+    form_class = AccountRegistrationForm
+    success_url = reverse_lazy("login_portal")
+
+    def form_valid(self, form):
+        user = form.save()
+        role = form.cleaned_data.get("role")
+        if role == "instructor":
+            messages.success(self.request, "注册成功，账号待管理员审批后方可登录。")
+        else:
+            login(self.request, user)
+            messages.success(self.request, "注册成功，已自动登录，请完善个人信息。")
+        return super().form_valid(form)
 
 
 class AccountHomeView(LoginRequiredMixin, TemplateView):
@@ -287,9 +306,19 @@ class StudentDashboardView(StudentPortalMixin, TemplateView):
 class StudentProfileView(StudentPortalMixin, TemplateView):
     template_name = "registration/student_profile.html"
 
+    def post(self, request, *args, **kwargs):
+        form = StudentContactForm(request.POST, instance=request.user.student_profile)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "联系方式已更新。")
+            return redirect("student_profile")
+        context = self.get_context_data(form=form)
+        return self.render_to_response(context)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(self._build_student_context())
+        context["form"] = kwargs.get("form") or StudentContactForm(instance=self.request.user.student_profile)
         return context
 
 
@@ -419,6 +448,17 @@ class StudentEnrollmentView(StudentPortalMixin, TemplateView):
             except Enrollment.DoesNotExist:
                 messages.error(request, "尚未选该课程或已退课。")
                 return redirect("student_enrollment")
+            remaining_credits = (
+                Enrollment.objects.filter(student=profile, status="enrolling")
+                .exclude(pk=enrollment.pk)
+                .select_related("section__course")
+                .aggregate(total=Sum("section__course__credits"))
+                .get("total")
+                or 0
+            )
+            if remaining_credits < 10:
+                messages.error(request, "退课后总学分将低于 10 学分，无法退课。")
+                return redirect("student_enrollment")
             enrollment.status = "dropped"
             enrollment.save(update_fields=["status"])
             messages.success(request, "已退选该课程。")
@@ -435,6 +475,22 @@ class StudentScheduleExportView(LoginRequiredMixin, View):
             student=request.user.student_profile,
             status__in=["enrolling", "passed", "failed"],
         ).values_list("section", flat=True)
+
+        credit_load = (
+            Enrollment.objects.filter(
+                student=request.user.student_profile,
+                status__in=["enrolling", "passed", "failed"],
+            )
+            .select_related("section__course")
+            .aggregate(total=Sum("section__course__credits"))
+            .get("total")
+            or 0
+        )
+        if credit_load < 10 or credit_load > 40:
+            return HttpResponse(
+                f"计划学分需在 10-40 学分之间，当前为 {float(credit_load):.1f}。",
+                status=400,
+            )
 
         meeting_times = MeetingTime.objects.filter(section_id__in=enrollments).select_related(
             "section__course", "section__semester", "section__instructor__user"
@@ -470,6 +526,35 @@ class StudentScheduleExportView(LoginRequiredMixin, View):
                 row.append(cell)
             writer.writerow(row)
 
+        return response
+
+
+class StudentTranscriptExportView(StudentPortalMixin, View):
+    def get(self, request, *args, **kwargs):
+        enrollments = (
+            Enrollment.objects.filter(student=request.user.student_profile)
+            .select_related("section__course", "section__semester")
+            .order_by("section__semester__start_date", "section__course__code")
+        )
+
+        response = HttpResponse(content_type="text/csv")
+        filename = f"transcript_{request.user.username}.csv"
+        response["Content-Disposition"] = f"attachment; filename={filename}"
+
+        writer = csv.writer(response)
+        writer.writerow(["学期", "课程代码", "课程名称", "学分", "状态", "成绩", "绩点"])
+        for enrollment in enrollments:
+            writer.writerow(
+                [
+                    enrollment.section.semester.code,
+                    enrollment.section.course.code,
+                    enrollment.section.course.name,
+                    enrollment.section.course.credits,
+                    enrollment.get_status_display(),
+                    enrollment.final_grade or "-",
+                    enrollment.grade_points or "-",
+                ]
+            )
         return response
 
 

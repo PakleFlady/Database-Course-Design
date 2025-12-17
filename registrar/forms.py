@@ -4,11 +4,13 @@ from __future__ import annotations
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
+from django.core.exceptions import ValidationError
 
 from .models import (
     ClassGroup,
     CourseSection,
     Department,
+    InstructorProfile,
     StudentProfile,
     StudentRequest,
     UserSecurity,
@@ -115,6 +117,79 @@ class UserCreationWithProfileForm(forms.ModelForm):
                 security.must_change_password = False
                 security.save(update_fields=["must_change_password"])
         return user
+
+
+class AccountRegistrationForm(forms.Form):
+    ROLE_CHOICES = [
+        ("student", "学生"),
+        ("instructor", "教师"),
+    ]
+
+    username = forms.CharField(label="用户名", max_length=150)
+    first_name = forms.CharField(label="姓名", required=False)
+    email = forms.EmailField(label="邮箱", required=False)
+    password1 = forms.CharField(label="密码", widget=forms.PasswordInput)
+    password2 = forms.CharField(label="确认密码", widget=forms.PasswordInput)
+    role = forms.ChoiceField(label="注册角色", choices=ROLE_CHOICES)
+    department = forms.ModelChoiceField(label="所属院系", queryset=Department.objects.all(), required=False)
+    class_group = forms.ModelChoiceField(label="班级", queryset=ClassGroup.objects.select_related("department"), required=False)
+    major = forms.CharField(label="专业", required=False)
+
+    def clean(self):
+        cleaned = super().clean()
+        username = cleaned.get("username")
+        password1 = cleaned.get("password1")
+        password2 = cleaned.get("password2")
+        role = cleaned.get("role")
+        department = cleaned.get("department")
+        class_group = cleaned.get("class_group")
+        major = cleaned.get("major")
+
+        if username and get_user_model().objects.filter(username=username).exists():
+            raise ValidationError("该用户名已被注册，请更换后重试。")
+        if password1 and password2 and password1 != password2:
+            raise ValidationError("两次输入的密码不一致。")
+        if role == "instructor" and not department:
+            raise ValidationError("教师注册需选择所属院系，提交后等待管理员审批。")
+        if role == "student" and (not department or not major):
+            raise ValidationError("学生注册需填写所属院系与专业信息。")
+        if class_group and department and class_group.department != department:
+            raise ValidationError("班级必须属于所选院系。")
+        return cleaned
+
+    def save(self):
+        UserModel = get_user_model()
+        data = self.cleaned_data
+        user = UserModel.objects.create(
+            username=data["username"],
+            first_name=data.get("first_name", ""),
+            email=data.get("email", ""),
+            is_active=data["role"] != "instructor",  # 教师账号需管理员审批后激活
+        )
+        user.set_password(data["password1"])
+        user.save()
+
+        security, _ = UserSecurity.objects.get_or_create(user=user)
+        security.must_change_password = True
+        security.save(update_fields=["must_change_password"])
+
+        if data["role"] == "instructor":
+            InstructorProfile.objects.create(user=user, department=data["department"])
+        else:
+            StudentProfile.objects.create(
+                user=user,
+                department=data["department"],
+                class_group=data.get("class_group"),
+                major=data.get("major", ""),
+            )
+        return user
+
+
+class StudentContactForm(forms.ModelForm):
+    class Meta:
+        model = StudentProfile
+        fields = ["contact_email", "contact_phone"]
+        labels = {"contact_email": "联系邮箱", "contact_phone": "联系电话"}
 
 
 class SelfServiceRequestForm(forms.ModelForm):

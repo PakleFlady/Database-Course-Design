@@ -4,6 +4,7 @@ from django.urls import path
 
 from registrar.views import (
     AccountHomeView,
+    AccountRegistrationView,
     AdminBulkEnrollmentView,
     AdminClassScheduleView,
     ForcePasswordChangeDoneView,
@@ -18,6 +19,7 @@ from registrar.views import (
     StudentDashboardView,
     StudentGradesView,
     StudentScheduleExportView,
+    StudentTranscriptExportView,
     StudentProfileView,
     StudentRequestLogView,
     StudentScheduleView,
@@ -32,6 +34,7 @@ from registrar.views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("accounts/register/", AccountRegistrationView.as_view(), name="account_register"),
     path("accounts/login/", LoginPortalView.as_view(), name="login_portal"),
     path("accounts/login/student/", StudentLoginView.as_view(), name="student_login"),
     path(
@@ -58,6 +61,11 @@ urlpatterns = [
         "accounts/home/student/grades/",
         StudentGradesView.as_view(),
         name="student_grades",
+    ),
+    path(
+        "accounts/home/student/grades/export/",
+        StudentTranscriptExportView.as_view(),
+        name="student_transcript_export",
     ),
     path(
         "accounts/home/student/requests/",

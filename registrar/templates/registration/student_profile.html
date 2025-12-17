@@ -2,7 +2,7 @@
 {% block title %}个人档案{% endblock %}
 {% block content %}
 <h1>个人档案</h1>
-<p>查看个人基础信息与联系方式，后续修改请联系管理员。</p>
+<p>查看并更新个人联系方式；学院、专业等核心信息如需修改请联系管理员。</p>
 
 <div class="hint">
   <strong>{{ profile.user.get_full_name|default:profile.user.username }}</strong> · {{ profile.get_gender_display|default:"未填写" }}<br />
@@ -10,6 +10,25 @@
   <span class="muted">班级：{{ profile.class_group|default:"未分配班级" }}</span><br />
   <span class="muted">联系方式：{{ profile.contact_email|default:"未写邮箱" }}{% if profile.contact_phone %} / {{ profile.contact_phone }}{% endif %}</span>
 </div>
+
+<form method="post" class="card" style="margin-top: 16px; max-width: 520px;">
+  {% csrf_token %}
+  <h3>更新联系方式</h3>
+  {{ form.non_field_errors }}
+  <div class="form-row">
+    <label for="{{ form.contact_email.id_for_label }}">{{ form.contact_email.label }}</label>
+    {{ form.contact_email }}
+    {{ form.contact_email.errors }}
+  </div>
+  <div class="form-row">
+    <label for="{{ form.contact_phone.id_for_label }}">{{ form.contact_phone.label }}</label>
+    {{ form.contact_phone }}
+    {{ form.contact_phone.errors }}
+  </div>
+  <div class="actions" style="margin-top: 10px;">
+    <button class="button primary" type="submit">保存联系方式</button>
+  </div>
+</form>
 
 <div class="actions" style="flex-wrap: wrap; gap: 10px; margin-top:14px;">
   <a class="button secondary" href="{% url 'student_home' %}">返回学生首页</a>
