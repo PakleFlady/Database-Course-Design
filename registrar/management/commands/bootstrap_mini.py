@@ -25,7 +25,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Seed a small dataset (few dozen records) for quick demo sessions"
+    help = "Seed a small dataset (~10 students) for quick demo sessions"
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.WARNING("Creating compact demo data..."))
@@ -80,6 +80,12 @@ class Command(BaseCommand):
             ("bob", "Bob", "male", cse, class_groups["CSE"], "软件工程"),
             ("cindy", "Cindy", "female", bus, class_groups["BUS"], "信息管理"),
             ("derek", "Derek", "male", bus, class_groups["BUS"], "信息管理"),
+            ("ellen", "Ellen", "female", cse, class_groups["CSE"], "人工智能"),
+            ("frank", "Frank", "male", cse, class_groups["CSE"], "数据科学"),
+            ("gina", "Gina", "female", bus, class_groups["BUS"], "工商管理"),
+            ("harry", "Harry", "male", bus, class_groups["BUS"], "金融科技"),
+            ("irene", "Irene", "female", cse, class_groups["CSE"], "网络安全"),
+            ("jack", "Jack", "male", cse, class_groups["CSE"], "软件工程"),
         ]
 
         students: list[StudentProfile] = []
