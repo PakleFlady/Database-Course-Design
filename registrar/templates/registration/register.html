@@ -15,11 +15,27 @@
         {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
         {{ field.errors }}
       </div>
-    {% endfor %}
+{% endfor %}
   </div>
   <div class="actions" style="margin-top: 12px;">
     <button class="button primary" type="submit">提交注册</button>
     <a class="button secondary" href="{% url 'login_portal' %}">返回登录</a>
   </div>
 </form>
+
+<script>
+  const roleSelect = document.getElementById('id_role');
+  const classRow = document.getElementById('id_class_group')?.closest('.form-row');
+  const majorRow = document.getElementById('id_major')?.closest('.form-row');
+
+  function toggleStudentFields() {
+    if (!roleSelect) return;
+    const isInstructor = roleSelect.value === 'instructor';
+    if (classRow) classRow.style.display = isInstructor ? 'none' : '';
+    if (majorRow) majorRow.style.display = isInstructor ? 'none' : '';
+  }
+
+  roleSelect?.addEventListener('change', toggleStudentFields);
+  toggleStudentFields();
+</script>
 {% endblock %}

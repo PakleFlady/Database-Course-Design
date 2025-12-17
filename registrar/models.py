@@ -72,11 +72,12 @@ class Semester(models.Model):
 
 class Course(models.Model):
     COURSE_TYPE_CHOICES = [
-        ("general_required", "通识必修"),
+        ("foundational_required", "基础必修"),
+        ("general_elective", "全校通识课"),
         ("major_required", "专业必修"),
         ("major_elective", "专业选修"),
-        ("university_elective", "校级选修"),
-        ("practical", "实践/实验"),
+        ("practical", "实践课"),
+        ("lab", "实验课"),
     ]
 
     code = models.CharField("课程代码", max_length=20, unique=True)
@@ -93,6 +94,50 @@ class Course(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.code} - {self.name}"
+
+
+class ProgramPlan(models.Model):
+    name = models.CharField("方案名称", max_length=255)
+    department = models.ForeignKey(
+        Department, on_delete=models.PROTECT, related_name="program_plans", verbose_name="学院"
+    )
+    major = models.CharField("面向专业", max_length=255)
+    academic_year = models.CharField("适用年级/年份", max_length=20)
+    enrollment_start = models.DateField("选课开始时间", null=True, blank=True)
+    enrollment_end = models.DateField("选课结束时间", null=True, blank=True)
+    total_credits = models.DecimalField("建议总学分", max_digits=5, decimal_places=1, null=True, blank=True)
+    is_active = models.BooleanField("启用", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "人才培养方案"
+        verbose_name_plural = "人才培养方案"
+        ordering = ["-academic_year", "department__code", "major"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.major}（{self.academic_year}）"
+
+
+class ProgramRequirement(models.Model):
+    plan = models.ForeignKey(
+        ProgramPlan, on_delete=models.CASCADE, related_name="requirements", verbose_name="所属方案"
+    )
+    category = models.CharField("课程类别", max_length=50, choices=Course.COURSE_TYPE_CHOICES)
+    required_credits = models.DecimalField("建议修读学分", max_digits=4, decimal_places=1)
+    recommended_term = models.CharField("建议学期/年级", max_length=50, blank=True)
+    selection_start = models.DateField("选课开始时间", null=True, blank=True)
+    selection_end = models.DateField("选课结束时间", null=True, blank=True)
+    notes = models.TextField("备注", blank=True)
+    courses = models.ManyToManyField(Course, related_name="program_requirements", blank=True)
+
+    class Meta:
+        verbose_name = "培养方案要求"
+        verbose_name_plural = "培养方案要求"
+        ordering = ["plan", "category", "recommended_term"]
+
+    def __str__(self) -> str:  # pragma: no cover - human readable labels
+        return f"{self.plan} - {self.get_category_display()}"
 
 
 class InstructorProfile(models.Model):
@@ -212,7 +257,7 @@ class CourseSection(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="sections", verbose_name="课程")
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name="sections", verbose_name="学期")
     instructor = models.ForeignKey(InstructorProfile, on_delete=models.PROTECT, related_name="sections", verbose_name="教师")
-    section_number = models.PositiveSmallIntegerField("教学班号", default=1)
+    section_number = models.PositiveSmallIntegerField("教学班号", null=True, blank=True)
     capacity = models.PositiveIntegerField("容量", default=60)
     grades_locked = models.BooleanField("成绩填报锁定", default=False)
     notes = models.TextField("备注", blank=True)
@@ -225,6 +270,22 @@ class CourseSection(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - human readable labels
         return f"{self.course.code}-S{self.section_number} ({self.semester.code})"
+
+    def _assign_section_number(self):
+        if self.section_number:
+            return
+        max_no = (
+            CourseSection.objects.filter(course=self.course, semester=self.semester)
+            .aggregate(max_no=Max("section_number"))
+            .get("max_no")
+            or 0
+        )
+        self.section_number = max_no + 1
+
+    def save(self, *args, **kwargs):
+        if self.course_id and self.semester_id and not self.section_number:
+            self._assign_section_number()
+        super().save(*args, **kwargs)
 
 
 class MeetingTime(models.Model):
@@ -307,20 +368,11 @@ class Enrollment(models.Model):
         ("passed", "已通过"),
         ("failed", "未通过"),
     ]
-    GRADE_CHOICES = [
-        ("A", "A"),
-        ("B", "B"),
-        ("C", "C"),
-        ("D", "D"),
-        ("F", "F"),
-        ("P", "P"),
-        ("NP", "NP"),
-    ]
 
     student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name="enrollments", verbose_name="学生")
     section = models.ForeignKey(CourseSection, on_delete=models.CASCADE, related_name="enrollments", verbose_name="教学班")
     status = models.CharField("状态", max_length=20, choices=STATUS_CHOICES, default="enrolling")
-    final_grade = models.CharField("最终成绩", max_length=2, choices=GRADE_CHOICES, blank=True)
+    final_grade = models.DecimalField("最终成绩", max_digits=5, decimal_places=2, null=True, blank=True)
     grade_points = models.DecimalField("绩点", max_digits=4, decimal_places=2, null=True, blank=True)
 
     class Meta:

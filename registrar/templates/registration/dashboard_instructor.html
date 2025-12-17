@@ -4,6 +4,12 @@
 <h1>教师工作台</h1>
 <p>查看你负责的教学班、审批学生申请，并在锁定前快速完成成绩录入。下方提供课表、成绩统计和审批入口，便于日常教学管理。</p>
 
+<div class="actions" style="flex-wrap: wrap; gap:8px;">
+  <a class="button" href="{% url 'instructor_roster' %}">成绩与名单</a>
+  <a class="button secondary" href="{% url 'approval_queue' %}">审批队列</a>
+  <a class="button secondary" href="{% url 'instructor_profile' %}">更新个人信息</a>
+</div>
+
 <div class="grid two">
   <div class="stat-card">
     <div class="stat-label">负责教学班</div>
@@ -52,6 +58,36 @@
       </tr>
       {% empty %}
       <tr><td colspan="5">暂未分配教学班。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>成绩分析</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>平均分</th>
+        <th>最高</th>
+        <th>最低</th>
+        <th>通过率</th>
+        <th>通过/未通过/进行中</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in grade_overview %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ item.section.course.code }} {{ item.section.course.name }}</td>
+        <td>{{ item.avg|default:"-" }}</td>
+        <td>{{ item.max|default:"-" }}</td>
+        <td>{{ item.min|default:"-" }}</td>
+        <td>{% if item.pass_rate %}{{ item.pass_rate }}%{% else %}-{% endif %}</td>
+        <td>{{ item.passed }}/{{ item.failed }}/{{ item.in_progress }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">暂无成绩数据</td></tr>
       {% endfor %}
     </tbody>
   </table>

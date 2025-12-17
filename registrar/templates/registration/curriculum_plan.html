@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}培养方案查询{% endblock %}
+{% block content %}
+<h1>人才培养方案 / 课程计划</h1>
+<p>查看各学院的培养方案，包括公共必修课、专业必修课、专业选修课、通识选修课等学分要求与选课时间。管理员可在后台调整或新增方案。</p>
+
+<form method="get" style="margin-bottom: 8px;">
+  <div class="grid two">
+    <div>
+      <label for="dept">按学院筛选</label>
+      <select id="dept" name="department">
+        <option value="">全部学院</option>
+        {% for dept in departments %}
+        <option value="{{ dept.code }}" {% if filters.department == dept.code %}selected{% endif %}>{{ dept.code }} {{ dept.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="major">专业关键词</label>
+      <input id="major" type="text" name="major" value="{{ filters.major }}" placeholder="如：计算机、软件工程" />
+    </div>
+  </div>
+  <button class="button" type="submit">应用筛选</button>
+</form>
+
+<div class="section">
+  <div class="grid two">
+    {% for item in plans %}
+    <div class="stat-card" style="border:1px solid #e5e7eb; background:#fff;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div>
+          <div class="stat-label">{{ item.plan.department.code }} · {{ item.plan.academic_year }}</div>
+          <div class="stat-value" style="font-size:18px;">{{ item.plan.name }}</div>
+          <div class="muted" style="color:#6b7280;">面向：{{ item.plan.major }}</div>
+        </div>
+        {% if item.is_open %}<span class="badge">选课进行中</span>{% endif %}
+      </div>
+      <div class="hint" style="margin-top:10px;">
+        建议总学分：{{ item.plan.total_credits|default:"--" }} · 选课窗口：
+        {% if item.plan.enrollment_start and item.plan.enrollment_end %}
+          {{ item.plan.enrollment_start }} - {{ item.plan.enrollment_end }}
+        {% else %}
+          未设置
+        {% endif %}
+      </div>
+      <h3>类别学分要求</h3>
+      <ul>
+        {% for label, credits in item.category_summary %}
+        <li>{{ label }}：{{ credits }} 学分</li>
+        {% endfor %}
+      </ul>
+      <h3>课程与修读建议</h3>
+      <table>
+        <thead>
+          <tr><th>类别</th><th>建议学分</th><th>建议学期</th><th>推荐课程</th></tr>
+        </thead>
+        <tbody>
+          {% for req in item.requirements %}
+          <tr>
+            <td>{{ req.get_category_display }}</td>
+            <td>{{ req.required_credits }}</td>
+            <td>{{ req.recommended_term|default:"--" }}</td>
+            <td>
+              {% if req.courses.all %}
+                {% for course in req.courses.all %}
+                  <div>{{ course.code }} {{ course.name }}（{{ course.credits }} 学分）</div>
+                {% empty %}
+                  <div>未指定推荐课程</div>
+                {% endfor %}
+              {% else %}
+                未指定推荐课程
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% empty %}
+    <div class="stat-card">暂无匹配的培养方案，请调整筛选条件或在后台创建新方案。</div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="actions" style="margin-top:12px;">
+  {% if show_admin_link %}<a class="button secondary" href="/admin/">在后台调整/新建方案</a>{% endif %}
+  <a class="muted-link" href="{% url 'account_home' %}">返回工作台</a>
+</div>
+{% endblock %}

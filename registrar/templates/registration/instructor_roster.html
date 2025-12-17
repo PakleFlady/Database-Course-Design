@@ -58,12 +58,7 @@
                   {% csrf_token %}
                   <input type="hidden" name="enrollment_id" value="{{ enrollment.id }}" />
                   <label class="sr-only" for="grade-{{ enrollment.id }}">成绩</label>
-                  <select name="final_grade" id="grade-{{ enrollment.id }}">
-                    <option value="">--</option>
-                    {% for code,label in enrollment.GRADE_CHOICES %}
-                    <option value="{{ code }}" {% if enrollment.final_grade == code %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                  </select>
+                  <input type="number" name="final_grade" id="grade-{{ enrollment.id }}" value="{{ enrollment.final_grade|default:"" }}" min="0" max="100" step="0.5" placeholder="成绩" />
                   <select name="status">
                     {% for code,label in enrollment.STATUS_CHOICES %}
                     <option value="{{ code }}" {% if enrollment.status == code %}selected{% endif %}>{{ label }}</option>
