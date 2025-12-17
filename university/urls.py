@@ -7,8 +7,11 @@ from registrar.views import (
     AccountRegistrationView,
     AdminBulkEnrollmentView,
     AdminClassScheduleView,
+    AdminClassGroupDetailView,
+    AdminDepartmentDetailView,
     ForcePasswordChangeDoneView,
     ForcePasswordChangeView,
+    AdminStudentDetailView,
     InstructorLoginView,
     LoginPortalView,
     CurriculumPlanView,
@@ -32,6 +35,8 @@ from registrar.views import (
     UserLogoutView,
     InstructorGradeUpdateView,
     AdminSectionLockToggleView,
+    AdminUserPasswordResetView,
+    SectionAnalyticsView,
 )
 
 urlpatterns = [
@@ -101,12 +106,37 @@ urlpatterns = [
         InstructorGradeUpdateView.as_view(),
         name="grade_update",
     ),
+    path(
+        "accounts/home/instructor/sections/<int:section_id>/analytics/",
+        SectionAnalyticsView.as_view(),
+        name="section_analytics",
+    ),
     path("accounts/home/admin/", AdminDashboardView.as_view(), name="admin_home"),
     path("accounts/home/admin/bulk-enroll/", AdminBulkEnrollmentView.as_view(), name="admin_bulk_enroll"),
     path(
         "accounts/home/admin/class-schedule/",
         AdminClassScheduleView.as_view(),
         name="admin_class_schedule",
+    ),
+    path(
+        "accounts/home/admin/departments/<int:pk>/",
+        AdminDepartmentDetailView.as_view(),
+        name="admin_department_detail",
+    ),
+    path(
+        "accounts/home/admin/class-groups/<int:pk>/",
+        AdminClassGroupDetailView.as_view(),
+        name="admin_class_detail",
+    ),
+    path(
+        "accounts/home/admin/students/<int:pk>/",
+        AdminStudentDetailView.as_view(),
+        name="admin_student_detail",
+    ),
+    path(
+        "accounts/home/admin/reset-password/",
+        AdminUserPasswordResetView.as_view(),
+        name="admin_reset_password",
     ),
     path(
         "accounts/home/admin/sections/<int:section_id>/lock/",

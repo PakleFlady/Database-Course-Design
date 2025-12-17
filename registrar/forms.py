@@ -62,7 +62,7 @@ class UserCreationWithProfileForm(forms.ModelForm):
         label="所属院系", queryset=Department.objects.all(), required=False
     )
     class_group = forms.ModelChoiceField(label="班级", queryset=None, required=False)
-    major = forms.CharField(label="专业", required=False)
+    major = forms.ChoiceField(label="专业", required=False, choices=[])
 
     class Meta:
         model = User
@@ -351,4 +351,14 @@ class AdminClassScheduleForm(forms.Form):
             ]
             if cross_department:
                 raise forms.ValidationError("仅允许将本学院的教学班同步到所选班级。")
+        return cleaned
+
+
+class AdminUserPasswordResetForm(forms.Form):
+    user_identifier = forms.CharField(label="用户名或邮箱", max_length=150)
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("user_identifier"):
+            raise forms.ValidationError("请填写需要重置密码的账号标识。")
         return cleaned

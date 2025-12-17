@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}学生档案{% endblock %}
+{% block content %}
+<h1>{{ student.user.get_full_name|default:student.user.username }} 的成绩档案</h1>
+<p>管理员可查看成绩记录、审批历史并一键重置密码。学生、班级与学院信息均在此集中呈现。</p>
+
+<div class="grid two">
+  <div class="stat-card">
+    <div class="stat-label">所属班级</div>
+    {% if student.class_group %}
+      <div class="stat-value">{{ student.class_group.department.code }} {{ student.class_group.name }}</div>
+    {% else %}
+      <div class="stat-value">未分班</div>
+    {% endif %}
+    <div class="muted">专业：{{ student.major }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">GPA / 已修学分</div>
+    <div class="stat-value">{{ gpa|default:"--" }} / {{ credit_load }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">成绩分布</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      {% for item in grade_chart %}
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:#6b7280;">
+          <span>{{ item.label }}</span>
+          <span>{{ item.count }} 门</span>
+        </div>
+        <div style="background:#eef2ff; border-radius:8px; height:8px; overflow:hidden;">
+          <div style="height:8px; background:#4f46e5; width:{{ item.width }}%;"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">账号维护</div>
+    <form method="post" action="{% url 'admin_reset_password' %}">
+      {% csrf_token %}
+      {{ reset_form.user_identifier.as_hidden }}
+      <input type="hidden" name="next" value="{% url 'admin_student_detail' student.id %}" />
+      <button class="button secondary" type="submit">重置密码为默认值</button>
+    </form>
+  </div>
+</div>
+
+<div class="section">
+  <h2>成绩记录</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>学期</th>
+        <th>课程</th>
+        <th>状态</th>
+        <th>成绩</th>
+        <th>绩点</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for enroll in enrollments %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ enroll.section.semester.code }}</td>
+        <td>{{ enroll.section.course.code }} {{ enroll.section.course.name }}</td>
+        <td>{{ enroll.get_status_display }}</td>
+        <td>{{ enroll.final_grade|default:"-" }}</td>
+        <td>{{ enroll.grade_points|default:"-" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂无成绩记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>审批记录</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>类型</th>
+        <th>课程</th>
+        <th>状态</th>
+        <th>时间</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for req in requests %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ req.get_request_type_display }}</td>
+        <td>{% if req.section %}{{ req.section.course.name }}{% else %}-{% endif %}</td>
+        <td>{{ req.get_status_display }}</td>
+        <td>{{ req.created_at|date:"Y-m-d H:i" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">暂无审批记录</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="actions" style="justify-content: space-between; flex-wrap: wrap; gap:10px;">
+  {% if student.class_group %}
+    <a class="button secondary" href="{% url 'admin_class_detail' student.class_group.id %}">返回班级</a>
+  {% endif %}
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="button secondary" href="{% url 'admin_home' %}">管理员工作台</a>
+    <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}班级详情{% endblock %}
+{% block content %}
+<h1>{{ class_group.department.code }} {{ class_group.name }}</h1>
+<p>查看班级成员、成绩分布与常选课程，并可直接为该班同步教学班选课。</p>
+
+<div class="grid two">
+  <div class="stat-card">
+    <div class="stat-label">学生人数</div>
+    <div class="stat-value">{{ students|length }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">平均 GPA</div>
+    <div class="stat-value">{{ avg_gpa|default:"--" }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">成绩分布</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      {% for item in grade_chart %}
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:#6b7280;">
+          <span>{{ item.label }}</span>
+          <span>{{ item.count }} 人</span>
+        </div>
+        <div style="background:#eef2ff; border-radius:8px; height:8px; overflow:hidden;">
+          <div style="height:8px; background:#4f46e5; width:{{ item.width }}%;"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">GPA 区间</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      {% for item in gpa_chart %}
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:#6b7280;">
+          <span>{{ item.label }}</span>
+          <span>{{ item.count }} 人</span>
+        </div>
+        <div style="background:#e0f2fe; border-radius:8px; height:8px; overflow:hidden;">
+          <div style="height:8px; background:#0ea5e9; width:{{ item.width }}%;"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>班级成员</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>学生</th>
+        <th>学号</th>
+        <th>GPA</th>
+        <th>已选课程数</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in students %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ item.student.user.get_full_name|default:item.student.user.username }}</td>
+        <td>{{ item.student.student_number }}</td>
+        <td>{{ item.gpa|default:"--" }}</td>
+        <td>{{ item.active_enrollments|length }}</td>
+        <td><a class="button secondary" href="{% url 'admin_student_detail' item.student.id %}">学生档案</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">暂无学生信息</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>热门课程</h2>
+  <table>
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+        <th>课程</th>
+        <th>选课人数</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for course in popular_courses %}
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td>{{ course.course_code }} {{ course.course_name }}</td>
+        <td>{{ course.count }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="2">暂无选课数据</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>为班级同步选课</h2>
+  <div class="hint">选择教学班后，将为 {{ class_group.name }} 的所有学生创建/更新对应选课记录，适合新学期统一分配课程。</div>
+  <form method="post" action="{% url 'admin_class_schedule' %}">
+    {% csrf_token %}
+    {{ schedule_form.non_field_errors }}
+    {{ schedule_form.class_group.as_hidden }}
+    <label for="id_sections">教学班（可多选）</label>
+    {{ schedule_form.sections }}
+    <input type="hidden" name="next" value="{% url 'admin_class_detail' class_group.id %}" />
+    <button class="button" type="submit">同步到班级</button>
+  </form>
+</div>
+
+<div class="actions" style="justify-content: space-between; flex-wrap: wrap; gap:10px;">
+  <a class="button secondary" href="{% url 'admin_department_detail' class_group.department.id %}">返回学院</a>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="button secondary" href="{% url 'admin_home' %}">管理员工作台</a>
+    <a class="muted-link" href="{% url 'logout' %}">退出登录</a>
+  </div>
+</div>
+{% endblock %}
